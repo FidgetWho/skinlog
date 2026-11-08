@@ -130,6 +130,21 @@ nav button.on{color:var(--accent);font-weight:600}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 .toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
 .toggle:last-child{border-bottom:0}
+.areas{position:absolute;top:10px;left:8px;right:8px;display:flex;gap:6px;justify-content:center;z-index:2}
+.areas button{background:rgba(0,0,0,.45);color:#fff;padding:6px 12px;border-radius:99px;font-size:13px;font-weight:600}
+.areas button.done{background:rgba(63,138,95,.9)}
+.areas button.on{background:#fff;color:#111}
+.shots{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
+.shot{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted);border:1px dashed var(--line);cursor:pointer}
+.shot.has{border:0}
+.shot img{width:100%;height:100%;object-fit:cover}
+.shot span{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:1px 6px;font-size:11px}
+.shot .badge{position:absolute;right:4px;top:4px;min-width:22px;height:22px;font-size:11px;padding:0 5px}
+.photos2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.photos2 .shot{border:0;cursor:default}
+.arow{margin-bottom:10px}
+.arow .an{font-size:12.5px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+.rates.sm button{height:34px;font-size:13px;border-radius:9px}
 .toggle input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 </style>
 </head>
@@ -147,6 +162,7 @@ nav button.on{color:var(--accent);font-weight:600}
     <div class="cam mirror" id="cam">
       <video id="video" playsinline autoplay muted></video>
       <img class="ghost" id="ghost" alt="">
+      <div class="areas" id="areaTabs"></div>
       <div class="msg" id="camMsg">
         <div>Starting camera…</div>
       </div>
@@ -162,14 +178,16 @@ nav button.on{color:var(--accent);font-weight:600}
     </label>
     <input id="sysCam" type="file" accept="image/*" capture="user" class="hidden">
     <input id="lib" type="file" accept="image/*" class="hidden">
-    <div class="alt"><label for="lib">Library</label><label for="sysCam">System camera</label><button id="nophoto">No photo</button></div>
+    <div class="shots" id="capShots"></div>
+    <button class="primary hidden" id="continueBtn"></button>
+    <div class="alt"><label for="lib">Library</label><label for="sysCam">System camera</label><button id="nophoto">No photos</button></div>
   </div>
 
   <div id="draft" class="card hidden">
-    <div id="previewWrap" class="preview hidden"><img id="preview" alt=""><button class="x" id="retake">Retake</button></div>
+    <div class="shots" id="draftShots" style="margin-top:0"></div>
 
     <div class="label">How's your skin? <span>0 clear · 10 worst</span></div>
-    <div class="rates" id="rates"></div>
+    <div id="rateRows"></div>
 
     <div class="label">What did you do? <span>products, food, sleep…</span></div>
     <button class="mic hidden" id="micBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Tap to talk</span></button>
@@ -223,6 +241,11 @@ const keyOf = (type, name) => type + ":" + normName(name).toLowerCase();
 const uidGen = () => "e_" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 let toastT;
 function toast(msg, ms=2600){ const t=$("#toast"); t.textContent=msg; t.classList.remove("hidden"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.add("hidden"), ms); }
+const AREAS = [["front","Front"],["left","Left"],["right","Right"],["neck","Neck"]];
+const AREA_KEYS = AREAS.map(a => a[0]);
+const areaLabel = k => (AREAS.find(a => a[0] === k) || [k, k])[1];
+const photosOf = e => e.photos || (e.photoId ? [{ area: "front", id: e.photoId }] : []);
+const meanOrNull = a => a.length ? mean(a) : null;
 const CATS = ["cleanser","toner","serum","treatment","exfoliant","moisturizer","sunscreen","spot treatment","mask","medication","supplement","makeup","other"];
 
 /* ================= local storage (IndexedDB) ================= */
@@ -265,7 +288,7 @@ function hydratePhotos(root=document){
 }
 
 /* ================= Claude API ================= */
-let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true };
+let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true, insArea: "all", histArea: "front" };
 async function saveSettings(){ await store.set("settings", settings).catch(()=>{}); }
 async function claude(content, { model, max_tokens = 1500, signal } = {}){
   if (!settings.apiKey) throw { code: "no_key", message: "Add your Anthropic API key in Settings." };
@@ -298,7 +321,8 @@ let analysis = null;
 let view = "log", histMode = "list", overlayKey = "";
 let lastSavedId = null;
 const LAGS = [{a:1,b:1,l:"Next day"},{a:1,b:3,l:"1–3 days"},{a:4,b:10,l:"4–10 days"},{a:11,b:28,l:"2–4 wks"}];
-const draft = { blob:null, url:null, rating:null };
+const draft = { photos: {}, ratings: {}, active: false };   // photos: {area: {blob,url}}, ratings: {area: n}
+let camArea = "front";
 
 function sortEntries(){ entries.sort((x,y)=> y.ts - x.ts); }
 async function putEntry(e){ const i = entries.findIndex(x=>x.id===e.id); if (i>=0) entries[i] = e; else entries.push(e); sortEntries(); await store.putEntry(e); render(); }
@@ -306,7 +330,7 @@ async function patchEntry(id, patch){ const e = entries.find(x=>x.id===id); if (
 
 /* ================= boot ================= */
 async function boot(){
-  renderRates();
+  renderAreaTabs(); renderCapShots();
   try { const s = await store.get("settings"); if (s) settings = { ...settings, ...s }; } catch {}
   if (settings.liveCam) startCamera(); else showSysCam();
   try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; }
@@ -383,28 +407,56 @@ $("#shutter").addEventListener("click", async () => {
   c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
   const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.86));
   if (navigator.vibrate) navigator.vibrate(10);
-  stopCamera(); openDraft(blob);
+  addShot(blob);
 });
 $("#flipBtn").addEventListener("click", async () => { settings.facing = settings.facing === "user" ? "environment" : "user"; saveSettings(); stopCamera(); startCamera(); });
 $("#ghostBtn").addEventListener("click", () => { settings.ghost = !settings.ghost; saveSettings(); updateGhost(); });
 async function updateGhost(){
-  const last = entries.find(e => e.photoId);
+  let pid = null;
+  for (const e of entries) { const p = photosOf(e).find(x => x.area === camArea); if (p) { pid = p.id; break; } }
   const g = $("#ghost"), b = $("#ghostBtn");
-  b.classList.toggle("hidden", !last); b.classList.toggle("on", !!settings.ghost);
-  if (last) { g.src = await photoURL(last.photoId); g.classList.toggle("on", !!settings.ghost); } else g.classList.remove("on");
+  b.classList.toggle("hidden", !pid); b.classList.toggle("on", !!settings.ghost);
+  if (pid) { const u = await photoURL(pid); if (camArea === camAreaAt(pid)) { g.src = u; g.classList.toggle("on", !!settings.ghost); } }
+  else { g.classList.remove("on"); g.removeAttribute("src"); }
+}
+const camAreaAt = pid => { for (const e of entries) { const p = photosOf(e).find(x => x.id === pid); if (p) return p.area; } return null; };
+function renderAreaTabs(){
+  $("#areaTabs").innerHTML = AREAS.map(([k,l]) => `<button data-area="${k}" class="${k===camArea?"on":""} ${draft.photos[k]?"done":""}">${draft.photos[k]&&k!==camArea?"✓ ":""}${l}</button>`).join("");
+}
+$("#areaTabs").addEventListener("click", e => { const b = e.target.closest("[data-area]"); if (!b) return; camArea = b.dataset.area; renderAreaTabs(); updateGhost(); });
+function renderCapShots(){
+  const n = Object.keys(draft.photos).length;
+  $("#capShots").innerHTML = n ? shotTiles(draft.photos) : "";
+  const c = $("#continueBtn"); c.classList.toggle("hidden", !n);
+  c.textContent = `Continue with ${n} photo${n===1?"":"s"} →`;
+}
+function shotTiles(photos){
+  return AREAS.map(([k,l]) => photos[k]
+    ? `<div class="shot has" data-shot="${k}"><img src="${photos[k].url}" alt=""><span>${l}</span></div>`
+    : `<div class="shot" data-shot="${k}">+ ${l}</div>`).join("");
+}
+$("#capShots").addEventListener("click", e => { const t = e.target.closest("[data-shot]"); if (!t) return; camArea = t.dataset.shot; renderAreaTabs(); updateGhost(); });
+$("#draftShots").addEventListener("click", e => { const t = e.target.closest("[data-shot]"); if (!t) return; backToCamera(t.dataset.shot); });
+$("#continueBtn").addEventListener("click", openDraft);
+function addShot(blob){
+  const old = draft.photos[camArea]; if (old) URL.revokeObjectURL(old.url);
+  draft.photos[camArea] = { blob, url: URL.createObjectURL(blob) };
+  draft.active = true;
+  const order = AREA_KEYS.slice(AREA_KEYS.indexOf(camArea) + 1).concat(AREA_KEYS);
+  const next = order.find(k => !draft.photos[k]);
+  if (next) { camArea = next; toast(`Got it. Next: ${areaLabel(next)}`, 1400); renderAreaTabs(); renderCapShots(); updateGhost(); }
+  else openDraft();
 }
 
 /* ================= capture → draft ================= */
 $("#sysCam").addEventListener("change", e => onPicked(e.target));
 $("#lib").addEventListener("change", e => onPicked(e.target));
-$("#nophoto").addEventListener("click", () => { stopCamera(); openDraft(null); });
-$("#retake").addEventListener("click", () => { resetDraft(true); });
+$("#nophoto").addEventListener("click", openDraft);
 $("#cancel").addEventListener("click", () => resetDraft(true));
 async function onPicked(input){
   const f = input.files[0]; input.value = ""; if (!f) return;
-  stopCamera();
   let b; try { b = await compress(f, 1600); } catch { b = f; }
-  openDraft(b);
+  addShot(b);
 }
 async function compress(blob, max){
   const url = URL.createObjectURL(blob);
@@ -416,31 +468,39 @@ async function compress(blob, max){
     return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(), "image/jpeg", 0.85));
   } finally { URL.revokeObjectURL(url); }
 }
-function openDraft(blob){
-  if (draft.url) URL.revokeObjectURL(draft.url);
-  draft.blob = blob; draft.url = blob ? URL.createObjectURL(blob) : null;
+function openDraft(){
+  stopCamera(); draft.active = true;
   $("#capture").classList.add("hidden"); $("#draft").classList.remove("hidden");
-  $("#previewWrap").classList.toggle("hidden", !blob);
-  if (blob) $("#preview").src = draft.url;
+  $("#draftShots").innerHTML = shotTiles(draft.photos);
+  renderRateRows();
   renderLastSaved();
+}
+function backToCamera(area){
+  stopMic();
+  camArea = area; renderAreaTabs(); renderCapShots(); updateGhost();
+  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
+  if (settings.liveCam && view === "log") startCamera();
 }
 function resetDraft(restartCam){
   stopMic();
-  if (draft.url) URL.revokeObjectURL(draft.url);
-  Object.assign(draft, { blob:null, url:null, rating:null });
-  $("#memo").value = ""; renderRates();
+  for (const p of Object.values(draft.photos)) URL.revokeObjectURL(p.url);
+  draft.photos = {}; draft.ratings = {}; draft.active = false; camArea = "front";
+  $("#memo").value = "";
   $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
+  renderAreaTabs(); renderCapShots(); updateGhost();
   if (restartCam !== false && settings.liveCam && view === "log") startCamera();
   renderLastSaved();
 }
-function renderRates(){
-  const el = $("#rates"); el.innerHTML = "";
-  for (let i=0;i<=10;i++){
-    const b = document.createElement("button"); b.textContent = i;
-    if (draft.rating === i) { b.className = "on"; b.style.background = rateColor(i); }
-    b.onclick = () => { draft.rating = draft.rating === i ? null : i; renderRates(); };
-    el.appendChild(b);
-  }
+function rateRow(area, value, onPick, extra=""){
+  let h = `<div class="arow"><div class="an"><span>${esc(area === "overall" ? "Overall" : areaLabel(area))}</span>${extra}</div><div class="rates sm">`;
+  for (let i=0;i<=10;i++) h += `<button data-ra="${area}" data-rv="${i}"${value===i?` class="on" style="background:${rateColor(i)}"`:""}>${i}</button>`;
+  return h + `</div></div>`;
+}
+function renderRateRows(){
+  const el = $("#rateRows");
+  const order = AREA_KEYS.filter(k => draft.photos[k]).concat(AREA_KEYS.filter(k => !draft.photos[k]));
+  el.innerHTML = order.map(k => rateRow(k, draft.ratings[k])).join("") + `<div class="hint" style="margin-top:-2px">Rate any sections you like. Skip the rest.</div>`;
+  el.onclick = e => { const b = e.target.closest("[data-ra]"); if (!b) return; const a = b.dataset.ra, v = +b.dataset.rv; if (draft.ratings[a] === v) delete draft.ratings[a]; else draft.ratings[a] = v; renderRateRows(); };
 }
 
 /* ================= voice (live speech-to-text) ================= */
@@ -477,16 +537,19 @@ $("#save").addEventListener("click", saveDraft);
 async function saveDraft(){
   stopMic();
   const memo = $("#memo").value.trim();
-  if (!draft.blob && !memo && draft.rating == null) { toast("Add a photo, rating, or memo first"); return; }
-  const now = Date.now(), id = uidGen();
-  let photoId = null;
-  if (draft.blob) { photoId = "p_" + id.slice(2); try { await store.putPhoto(photoId, draft.blob); } catch { photoId = null; toast("Couldn't store the photo"); } }
-  const e = { id, ts: now, date: ymd(now), photoId, rating: draft.rating, memo, products: [], factors: [], skin: "", summary: "", ai: null,
-              needsParse: !!memo, needsAi: !!(photoId && settings.aiPhoto), status: memo ? "queued" : "ok", error: "" };
+  const shotAreas = AREA_KEYS.filter(k => draft.photos[k]);
+  const areaRatings = {}; for (const k of AREA_KEYS) if (draft.ratings[k] != null) areaRatings[k] = draft.ratings[k];
+  if (!shotAreas.length && !memo && !Object.keys(areaRatings).length) { toast("Add a photo, rating, or memo first"); return; }
+  const now = Date.now(), id = uidGen(), photos = [];
+  for (const k of shotAreas) {
+    const pid = "p_" + id.slice(2) + "_" + k;
+    try { await store.putPhoto(pid, draft.photos[k].blob); photos.push({ area: k, id: pid }); } catch { toast("Couldn't store a photo"); }
+  }
+  const e = { id, ts: now, date: ymd(now), photos, areaRatings, rating: meanOrNull(Object.values(areaRatings)), memo, products: [], factors: [], skin: "", summary: "", ai: null,
+              needsParse: !!memo, needsAi: !!(photos.length && settings.aiPhoto), status: memo ? "queued" : "ok", error: "" };
   try { await putEntry(e); } catch { toast("Couldn't save. Storage may be full."); return; }
   lastSavedId = id;
   resetDraft(true);
-  updateGhost();
   toast("Saved");
   processQueue();
 }
@@ -507,8 +570,12 @@ async function processQueue(){
           await patchEntry(e.id, { status: "error", error: errText(err), needsParse: false });
         }
       }
-      if (e.needsAi && e.photoId) {
-        try { const blob = await store.getPhoto(e.photoId); if (blob) { const ai = await assessPhoto(blob); await patchEntry(e.id, { ai, needsAi: false }); } else await patchEntry(e.id, { needsAi: false }); }
+      if (e.needsAi) {
+        try {
+          const shots = [];
+          for (const p of photosOf(e)) { const blob = await store.getPhoto(p.id); if (blob) shots.push({ area: p.area, blob }); }
+          if (shots.length) { const ai = await assessPhotos(shots); await patchEntry(e.id, { ai, needsAi: false }); } else await patchEntry(e.id, { needsAi: false });
+        }
         catch (err) { if (["offline","network","rate_limited","overloaded"].includes(err.code)) break; await patchEntry(e.id, { needsAi: false }); }
       }
     }
@@ -549,21 +616,49 @@ Rules:
     skin: String(r?.skin||"").slice(0,300), summary: String(r?.summary||"").slice(0,200)
   };
 }
-async function assessPhoto(blob){
-  const small = await compress(blob, 1100).catch(() => blob);
-  const data = await blobToB64(small);
-  const text = `This is a photo a person took of their own face/skin to track their acne over time. Assess only visible acne, consistently, as a dermatology-style severity estimate.
+async function assessPhotos(shots){
+  const content = [];
+  for (const [i, sh] of shots.entries()) {
+    const small = await compress(sh.blob, 1000).catch(() => sh.blob);
+    content.push({ type: "text", text: `Photo ${i+1}: ${sh.area === "neck" ? "neck" : sh.area === "front" ? "face, front view" : `face, ${sh.area} side`}` });
+    content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: await blobToB64(small) } });
+  }
+  content.push({ type: "text", text: `These are photos a person took of their own skin to track their acne over time, one per section (${shots.map(s=>s.area).join(", ")}). Assess only visible acne in each photo, consistently, as a dermatology-style severity estimate.
 Reply with only JSON:
-{"score": number 0-10 or null, "inflamed": integer estimate of red/inflamed papules+pustules, "comedones": "none"|"few"|"many", "regions": ["forehead"|"temples"|"cheeks"|"nose"|"chin"|"jawline"|"neck"|"chest"|"back"], "note": "one short neutral sentence"}
+{"areas": {"<section>": {"score": number 0-10 or null, "inflamed": integer estimate of red/inflamed papules+pustules, "comedones": "none"|"few"|"many", "regions": ["forehead"|"temples"|"cheeks"|"nose"|"chin"|"jawline"|"neck"|...], "note": "one short neutral sentence"}}}
+Use these section keys exactly: ${shots.map(s=>JSON.stringify(s.area)).join(", ")}.
 Scale: 0 = clear; 1-2 = a few small spots; 3-4 = mild-moderate, several papules; 5-6 = moderate, many inflamed lesions; 7-8 = severe, widespread or nodules/cysts; 9-10 = extreme.
-If skin is not clearly visible (blurry, too dark, not skin), use score null and explain in note.`;
-  const r = parseJSON(await claude([{ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }, { type: "text", text }], { model: settings.parseModel, max_tokens: 400 }));
-  const score = typeof r.score === "number" ? Math.max(0, Math.min(10, r.score)) : null;
-  return { score, inflamed: Number.isFinite(+r.inflamed) ? Math.round(+r.inflamed) : null, comedones: r.comedones ? String(r.comedones) : null,
-           regions: Array.isArray(r.regions) ? r.regions.map(String).slice(0,8) : [], note: r.note ? String(r.note).slice(0,240) : "" };
+If skin isn't clearly visible in a photo (blurry, too dark), use score null for it and say why in note.` });
+  const r = parseJSON(await claude(content, { model: settings.parseModel, max_tokens: 900 }));
+  const areas = {};
+  for (const sh of shots) {
+    const x = r?.areas?.[sh.area] || {};
+    areas[sh.area] = { score: typeof x.score === "number" ? Math.max(0, Math.min(10, x.score)) : null,
+      inflamed: Number.isFinite(+x.inflamed) ? Math.round(+x.inflamed) : null, comedones: x.comedones ? String(x.comedones) : null,
+      regions: Array.isArray(x.regions) ? x.regions.map(String).slice(0,8) : [], note: x.note ? String(x.note).slice(0,240) : "" };
+  }
+  const scores = Object.values(areas).map(a => a.score).filter(v => v != null);
+  const inflamed = Object.values(areas).map(a => a.inflamed).filter(v => v != null);
+  return { score: meanOrNull(scores), inflamed: inflamed.length ? inflamed.reduce((a,b)=>a+b,0) : null,
+           regions: [...new Set(Object.values(areas).flatMap(a => a.regions))], note: "", areas };
 }
 
 /* ================= shared renderers ================= */
+function areaScore(e, area){
+  const v = e.areaRatings?.[area]; if (v != null) return { r: v, ai: false };
+  const a = e.ai?.areas?.[area]?.score; if (a != null) return { r: a, ai: true };
+  return { r: null };
+}
+function areaSummary(e){
+  const parts = AREA_KEYS.map(k => { const x = areaScore(e, k); return x.r != null ? `${areaLabel(k)} ${Math.round(x.r*10)/10}` : null; }).filter(Boolean);
+  return parts.length > 1 ? `<br>${esc(parts.join(" · "))}` : "";
+}
+function aiBlock(e){
+  const a = e.ai;
+  if (!a) return e.needsAi ? `<div class="ai"><span class="spin"></span> AI estimate pending</div>` : "";
+  if (a.areas) return Object.entries(a.areas).map(([k,x]) => x.score != null || x.note ? `<div class="ai" style="margin:4px 0">${badge(x.score,true)}<span><b>${esc(areaLabel(k))}</b>${x.inflamed!=null?` · ~${esc(x.inflamed)} inflamed`:""}${x.regions?.length?` · ${esc(x.regions.join(", "))}`:""}${x.note?`<br>${esc(x.note)}`:""}</span></div>` : "").join("");
+  return a.score != null ? `<div class="ai" style="margin-bottom:6px">${badge(a.score,true)}<span><b>AI estimate</b>${a.inflamed!=null?` · ~${esc(a.inflamed)} inflamed`:""}${a.regions?.length?` · ${esc(a.regions.join(", "))}`:""}${a.note?`<br>${esc(a.note)}`:""}</span></div>` : "";
+}
 function entryRating(e){ if (e.rating != null) return { r: e.rating, ai: false }; if (e.ai && e.ai.score != null) return { r: e.ai.score, ai: true }; return { r: null }; }
 function usageTable(e){
   const p = e.products||[], f = e.factors||[];
@@ -593,7 +688,7 @@ function renderLastSaved(){
     while (days.has(d)) { streak++; d = addDays(d,-1); }
     h += `<div class="sub" style="text-align:center;margin-top:14px">${entries.length} entr${entries.length===1?"y":"ies"} · ${days.size} day${days.size===1?"":"s"} logged${streak>1?` · ${streak}-day streak`:""}</div>`;
   } else {
-    h += `<div class="card" style="margin-top:16px"><h3 style="margin-top:0">How it works</h3><div class="sub">1. Snap a photo each morning and/or night. “Align” overlays your last photo so the angle matches.<br>2. Rate your skin and say what you used, ate, and how you slept.<br>3. After a few weeks, Insights compares your skin on days after each product or habit with days without it.</div></div>`;
+    h += `<div class="card" style="margin-top:16px"><h3 style="margin-top:0">How it works</h3><div class="sub">1. Snap Front, Left, Right and Neck. The camera steps through them, and “Align” overlays your last photo of that section so the angle matches.<br>2. Rate each section and say what you used, ate, and how you slept.<br>3. After a few weeks, Insights compares your skin on days after each product or habit with days without it.</div></div>`;
   }
   el.innerHTML = h;
 }
@@ -603,8 +698,11 @@ function renderHistory(){
   const el = $("#histBody");
   if (!entries.length) { el.innerHTML = `<div class="empty">No entries yet. Log your first one from the Log tab.</div>`; return; }
   if (histMode === "photos") {
-    const ph = entries.filter(e=>e.photoId);
-    el.innerHTML = ph.length ? `<div class="grid">${ph.map(e=>{ const rr=entryRating(e); return `<div class="g" data-open="${e.id}"><img data-pid="${esc(e.photoId)}" alt="">${badge(rr.r, rr.ai)}<span class="d">${esc(shortDay(e.date))}</span></div>`; }).join("")}</div>` : `<div class="empty">No photos yet.</div>`;
+    const A = settings.histArea || "front";
+    const seg = `<div class="seg" id="histAreaSeg">${AREAS.map(([k,l])=>`<button data-a="${k}"${k===A?' class="on"':""}>${l}</button>`).join("")}</div>`;
+    const ph = entries.map(e => ({ e, p: photosOf(e).find(x => x.area === A) })).filter(x => x.p);
+    el.innerHTML = seg + (ph.length ? `<div class="grid">${ph.map(({e,p})=>{ const r = areaScore(e, A); return `<div class="g" data-open="${e.id}"><img data-pid="${esc(p.id)}" alt="">${badge(r.r, r.ai)}<span class="d">${esc(shortDay(e.date))}</span></div>`; }).join("")}</div>` : `<div class="empty">No ${esc(areaLabel(A).toLowerCase())} photos yet.</div>`);
+    $("#histAreaSeg").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; settings.histArea = b.dataset.a; saveSettings(); renderHistory(); };
     hydratePhotos(el); return;
   }
   let h = "", last = "";
@@ -613,8 +711,8 @@ function renderHistory(){
     const rr = entryRating(e);
     const chips = [...(e.products||[]).map(p=>`<span class="chip">${esc(p.name)}</span>`), ...(e.factors||[]).map(f=>`<span class="chip f">${esc(f.name)}</span>`)].join("");
     h += `<div class="card entry" data-open="${e.id}">
-      ${e.photoId?`<img class="thumb" data-pid="${esc(e.photoId)}" alt="">`:`<div class="thumb">✎</div>`}
-      <div class="meta"><div class="row" style="justify-content:space-between"><span class="sub">${fmtTime(e.ts)}</span>${badge(rr.r, rr.ai)}</div>
+      ${photosOf(e).length?`<img class="thumb" data-pid="${esc(photosOf(e)[0].id)}" alt="">`:`<div class="thumb">✎</div>`}
+      <div class="meta"><div class="row" style="justify-content:space-between"><span class="sub">${fmtTime(e.ts)}${photosOf(e).length>1?` · ${photosOf(e).length} photos`:""}${areaSummary(e)}</span>${badge(rr.r, rr.ai)}</div>
       ${e.status==="parsing"||e.status==="queued"?`<div class="sub">${e.status==="parsing"?'<span class="spin"></span> parsing…':"queued"}</div>`:""}
       ${chips?`<div class="chips">${chips}</div>`:(e.memo?`<div class="memo">${esc(e.memo)}</div>`:"")}</div></div>`;
   }
@@ -629,23 +727,23 @@ $("#sheet").addEventListener("click", e => { if (e.target.id === "sheet") closeS
 function openSheet(id){
   const e = entries.find(x=>x.id===id); if (!e) return;
   sheetMode = "entry"; sheetEntryId = id; delArm = false;
-  editState = { rating: e.rating, memo: e.memo||"", products: structuredClone(e.products||[]), factors: structuredClone(e.factors||[]), dirty: false };
+  editState = { rating: e.rating, areaRatings: { ...(e.areaRatings||{}) }, memo: e.memo||"", products: structuredClone(e.products||[]), factors: structuredClone(e.factors||[]), dirty: false };
   showSheet(); renderSheet();
 }
 function renderSheet(){
   const e = entries.find(x=>x.id===sheetEntryId); if (!e) { closeSheet(); return; }
   const s = editState;
-  if (!s.dirty) { s.products = structuredClone(e.products||[]); s.factors = structuredClone(e.factors||[]); s.memo = e.memo||""; s.rating = e.rating; }
+  if (!s.dirty) { s.products = structuredClone(e.products||[]); s.factors = structuredClone(e.factors||[]); s.memo = e.memo||""; s.rating = e.rating; s.areaRatings = { ...(e.areaRatings||{}) }; }
   const a = e.ai;
   const catOpts = v => CATS.map(c=>`<option${c===v?" selected":""}>${c}</option>`).join("");
   const timeOpts = (t, o) => [["am",0,"AM"],["pm",0,"PM"],["pm",-1,"Last night"],["am",-1,"Yday AM"],["other",0,"Today"],["other",-1,"Yesterday"]].map(([tt,oo,l])=>`<option value="${tt}|${oo}"${tt===t&&oo===(o||0)?" selected":""}>${l}</option>`).join("");
   const scroll = $("#sheetPanel").scrollTop;
   $("#sheetPanel").innerHTML = `<div class="grab"></div>
     <div class="row" style="justify-content:space-between;margin-bottom:12px"><div><h2 style="margin:0">${esc(fmtDay(e.date))}</h2><div class="sub">${fmtTime(e.ts)}</div></div><button class="btn" id="shClose">Done</button></div>
-    ${e.photoId?`<div class="preview" style="margin-bottom:10px"><img data-pid="${esc(e.photoId)}" alt="" style="max-height:none"></div>`:""}
-    ${a&&a.score!=null?`<div class="ai" style="margin-bottom:6px">${badge(a.score,true)}<span><b>AI estimate</b>${a.inflamed!=null?` · ~${esc(a.inflamed)} inflamed`:""}${a.regions?.length?` · ${esc(a.regions.join(", "))}`:""}${a.note?`<br>${esc(a.note)}`:""}</span></div>`:(e.needsAi?`<div class="ai"><span class="spin"></span> AI estimate pending</div>`:"")}
-    <div class="label">Your rating <span>0 clear · 10 worst</span></div>
-    <div class="rates" id="shRates"></div>
+    ${photosOf(e).length?`<div class="${photosOf(e).length>1?"photos2":""}" style="margin-bottom:10px">${photosOf(e).map(p=>`<div class="shot has" style="${photosOf(e).length>1?"":"aspect-ratio:auto"}"><img data-pid="${esc(p.id)}" alt=""><span>${esc(areaLabel(p.area))}</span></div>`).join("")}</div>`:""}
+    ${aiBlock(e)}
+    <div class="label">Your ratings <span>0 clear · 10 worst</span></div>
+    <div id="shRates"></div>
     <div class="label">Products</div>
     <div>${s.products.map((p,i)=>`<div class="edit-row"><input data-p="${i}" data-k="name" value="${esc(p.name)}" placeholder="Product"><select data-p="${i}" data-k="when">${timeOpts(p.time,p.dayOffset)}</select><button class="rm" data-rmp="${i}">×</button><select class="wide" data-p="${i}" data-k="category">${catOpts(p.category)}</select></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
     <button class="btn small" id="addP">+ Product</button>
@@ -660,7 +758,12 @@ function renderSheet(){
   $("#sheetPanel").scrollTop = scroll;
   hydratePhotos($("#sheetPanel"));
   const rEl = $("#shRates");
-  for (let i=0;i<=10;i++){ const b=document.createElement("button"); b.textContent=i; if(s.rating===i){b.className="on";b.style.background=rateColor(i);} b.onclick=()=>{s.rating = s.rating===i?null:i; s.dirty=true; renderSheet();}; rEl.appendChild(b); }
+  const shot = new Set(photosOf(e).map(p=>p.area));
+  const legacy = !e.areaRatings;
+  rEl.innerHTML = (legacy ? rateRow("overall", s.rating) : "") + AREA_KEYS.filter(k=>shot.has(k)).concat(AREA_KEYS.filter(k=>!shot.has(k))).map(k => rateRow(k, s.areaRatings[k], null, (() => { const x = e.ai?.areas?.[k]; return x && x.score != null ? `<span>AI ${Math.round(x.score*10)/10}</span>` : ""; })())).join("");
+  rEl.onclick = ev => { const b = ev.target.closest("[data-ra]"); if (!b) return; const a = b.dataset.ra, v = +b.dataset.rv; s.dirty = true;
+    if (a === "overall") s.rating = s.rating === v ? null : v; else { if (s.areaRatings[a] === v) delete s.areaRatings[a]; else s.areaRatings[a] = v; }
+    renderSheet(); };
   $("#shClose").onclick = closeSheet;
   const onEdit = ev => {
     const t = ev.target; if (!t.matches("input,select,textarea")) return; s.dirty = true;
@@ -683,13 +786,14 @@ function renderSheet(){
   $("#shSave").onclick = async () => {
     const products = s.products.filter(p=>normName(p.name)).map(p=>({...p, name: normName(p.name)}));
     const factors = s.factors.filter(f=>normName(f.name)).map(f=>({...f, name: normName(f.name).toLowerCase()}));
-    try { await patchEntry(e.id, { rating: s.rating, memo: s.memo.trim(), products, factors, ...(e.status==="error"&&!e.needsParse?{status:"ok"}:{}) }); toast("Saved"); closeSheet(); }
+    const hasArea = Object.keys(s.areaRatings).length > 0;
+    try { await patchEntry(e.id, { areaRatings: { ...s.areaRatings }, rating: hasArea ? meanOrNull(Object.values(s.areaRatings)) : (e.areaRatings ? null : s.rating), memo: s.memo.trim(), products, factors, ...(e.status==="error"&&!e.needsParse?{status:"ok"}:{}) }); toast("Saved"); closeSheet(); }
     catch { toast("Couldn't save"); }
   };
   $("#shDel").onclick = async () => {
     if (!delArm) { delArm = true; renderSheet(); setTimeout(()=>{ if(delArm && sheetEntryId===e.id){delArm=false; renderSheet();} }, 3500); return; }
     try {
-      if (e.photoId) { await store.delPhoto(e.photoId).catch(()=>{}); const u = photoURLs.get(e.photoId); if (u) { URL.revokeObjectURL(u); photoURLs.delete(e.photoId); } }
+      for (const p of photosOf(e)) { await store.delPhoto(p.id).catch(()=>{}); const u = photoURLs.get(p.id); if (u) { URL.revokeObjectURL(u); photoURLs.delete(p.id); } }
       await store.delEntry(e.id); entries = entries.filter(x=>x.id!==e.id);
       if (lastSavedId===e.id) lastSavedId=null; closeSheet(); updateGhost(); render(); toast("Deleted");
     } catch { toast("Couldn't delete"); }
@@ -751,7 +855,7 @@ async function renderSettings(){
 async function exportBackup(){
   toast("Preparing backup…", 8000);
   const photos = {};
-  for (const e of entries) if (e.photoId) { const b = await store.getPhoto(e.photoId).catch(()=>null); if (b) photos[e.photoId] = await blobToB64(b); }
+  for (const e of entries) for (const p of photosOf(e)) { const b = await store.getPhoto(p.id).catch(()=>null); if (b) photos[p.id] = await blobToB64(b); }
   const json = JSON.stringify({ app: "skinlog", version: 1, exported: Date.now(), entries, analysis, photos });
   const file = new File([json], `skinlog-backup-${ymd(Date.now())}.json`, { type: "application/json" });
   try {
@@ -777,11 +881,12 @@ $("#importFile").addEventListener("change", async ev => {
 });
 
 /* ================= analysis ================= */
-function dailyRatings(){
+function dailyRatings(area = "all"){
   const m = new Map();
   for (const e of entries) {
-    let r = e.rating, ai = false;
-    if (r == null && settings.useAiFill && e.ai && e.ai.score != null) { r = e.ai.score; ai = true; }
+    let r, ai = false;
+    if (area === "all") { r = e.rating; if (r == null && settings.useAiFill && e.ai && e.ai.score != null) { r = e.ai.score; ai = true; } }
+    else { const x = areaScore(e, area); r = x.r; ai = !!x.ai; if (ai && !settings.useAiFill) r = null; }
     if (r == null) continue;
     if (!m.has(e.date)) m.set(e.date, { you: [], ai: [] });
     m.get(e.date)[ai ? "ai" : "you"].push(r);
@@ -807,8 +912,8 @@ function exposureMap(){
   }
   return { ex, observed, meta };
 }
-function computeEffects(lag){
-  const ratings = dailyRatings(), { ex, observed, meta } = exposureMap(), res = [];
+function computeEffects(lag, area = "all"){
+  const ratings = dailyRatings(area), { ex, observed, meta } = exposureMap(), res = [];
   for (const [k, dates] of ex) {
     const yes = [], no = [];
     for (const [D, r] of ratings) {
@@ -853,9 +958,9 @@ function renderProducts(){
 }
 function toCsv(){
   const q = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
-  const out = [["date","time","your_rating","ai_rating","type","name","category","when","day_offset","detail","memo"].join(",")];
+  const out = [["date","time","your_rating","ai_rating","front","left","right","neck","type","name","category","when","day_offset","detail","memo"].join(",")];
   for (const e of entries.slice().reverse()) {
-    const base = [e.date, fmtTime(e.ts), e.rating ?? "", e.ai?.score ?? ""];
+    const base = [e.date, fmtTime(e.ts), e.rating ?? "", e.ai?.score ?? "", ...AREA_KEYS.map(k => areaScore(e, k).r ?? "")];
     const items = [...(e.products||[]).map(p=>["product",p.name,p.category,p.time,p.dayOffset||0,p.amount||""]), ...(e.factors||[]).map(f=>["factor",f.name,"","",f.dayOffset||0,f.detail||""])];
     if (!items.length) items.push(["","","","","",""]);
     items.forEach((it, i) => out.push([...base, ...it, i===0 ? e.memo||"" : ""].map(q).join(",")));
@@ -865,9 +970,10 @@ function toCsv(){
 
 function renderInsights(){
   const el = $("#insBody");
-  const ratings = dailyRatings(), { meta } = exposureMap();
+  const IA = settings.insArea || "all";
+  const ratings = dailyRatings(IA), { meta } = exposureMap();
   const lag = LAGS[settings.lagIdx] || LAGS[1];
-  const effs = computeEffects(lag);
+  const effs = computeEffects(lag, IA);
   const worse = effs.filter(x=>x.delta > 0.15).sort((a,b)=>b.z-a.z).slice(0,10);
   const better = effs.filter(x=>x.delta < -0.15).sort((a,b)=>a.z-b.z).slice(0,10);
   const conf = z => { const a = Math.abs(z); return a >= 2 ? "strong signal" : a >= 1 ? "some signal" : "weak signal"; };
@@ -875,7 +981,8 @@ function renderInsights(){
     return `<div class="eff"><div class="n">${esc(x.name)}<small>${x.type==="f"?"factor":"product"} · ${conf(x.z)} · ${x.nYes} days vs ${x.nNo}</small></div>
       <div class="bar"><i style="background:${col};${x.delta>0?`left:50%;width:${w}%`:`right:50%;width:${w}%`}"></i></div><div class="delta" style="color:${col}">${x.delta>0?"+":""}${x.delta.toFixed(1)}</div></div>`; };
   const opts = [...meta.entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k,m])=>`<option value="${esc(k)}"${k===overlayKey?" selected":""}>${esc(m.name)}${m.type==="f"?" (factor)":""}</option>`).join("");
-  let h = `<h2 style="margin-top:4px">Skin over time</h2><div class="card">${ratings.size ? trendChart(ratings) : `<div class="sub">Rate your skin when you log to see a trend.</div>`}
+  let h = `<div class="seg" id="insAreaSeg" style="margin-top:2px">${[["all","All"],...AREAS].map(([k,l])=>`<button data-a="${k}"${k===IA?' class="on"':""}>${l}</button>`).join("")}</div>
+    <h2 style="margin-top:4px">${IA==="all"?"Skin over time":esc(areaLabel(IA))+" over time"}</h2><div class="card">${ratings.size ? trendChart(ratings) : `<div class="sub">Rate your skin when you log to see a trend.</div>`}
     ${meta.size ? `<div class="row" style="margin-top:10px"><span class="sub">Overlay</span><select id="overlay" style="flex:1;padding:7px 9px"><option value="">None</option>${opts}</select></div>` : ""}
     <label class="toggle" style="border:0;padding-bottom:0"><span class="sub">Use AI photo estimate on days you didn't rate</span><input type="checkbox" id="aiFill"${settings.useAiFill?" checked":""}></label></div>`;
   h += `<h2>What's linked to your skin</h2><div class="seg" id="lagSeg">${LAGS.map((l,i)=>`<button data-i="${i}"${i===settings.lagIdx?' class="on"':""}>${l.l}</button>`).join("")}</div>`;
@@ -892,6 +999,7 @@ function renderInsights(){
   $("#aiFill").onchange = ev => { settings.useAiFill = ev.target.checked; saveSettings(); renderInsights(); };
   $("#lagSeg").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; settings.lagIdx = +b.dataset.i; saveSettings(); renderInsights(); };
   $("#askBtn").onclick = runAnalysis;
+  $("#insAreaSeg").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; settings.insArea = b.dataset.a; saveSettings(); renderInsights(); };
 }
 let askCtl = null;
 async function runAnalysis(){
@@ -908,12 +1016,14 @@ async function runAnalysis(){
     if (e.skin) d.skin.push(e.skin);
     if (e.ai?.regions?.length) d.ai.push(e.ai.regions.join("/"));
   }
+  const areaDaily = Object.fromEntries(AREA_KEYS.map(k => [k, dailyRatings(k)]));
   const lines = [...byDay.keys()].sort().slice(-150).map(d => { const v = byDay.get(d), r = ratings.get(d);
-    return `${d} | rating ${r!=null?r.toFixed(1):"-"} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.skin.length?` | notes: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
+    const ar = AREA_KEYS.map(k => areaDaily[k].has(d) ? `${k} ${areaDaily[k].get(d).toFixed(1)}` : null).filter(Boolean).join(", ");
+    return `${d} | rating ${r!=null?r.toFixed(1):"-"}${ar?` (${ar})`:""} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.skin.length?` | notes: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
   const { meta } = exposureMap();
   const starts = [...meta.values()].filter(m=>m.type==="p").map(m=>{ const s = startEffect(m, ratings); return `${m.name}: first ${m.first}${s?`, avg ${s.before.toFixed(1)} (2wk before) → ${s.after.toFixed(1)} (4wk after)`:""}`; });
   const effs = computeEffects(LAGS[1]).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)).slice(0,15).map(x=>`${x.name}: ${x.delta>0?"+":""}${x.delta.toFixed(2)} (n=${x.nYes} vs ${x.nNo}, z=${x.z.toFixed(1)})`);
-  const prompt = `You're helping someone understand their own acne from a personal log they keep. Ratings are 0 (clear) to 10 (worst), self-rated (or AI-estimated from a photo on days they didn't rate).
+  const prompt = `You're helping someone understand their own acne from a personal log they keep. Ratings are 0 (clear) to 10 (worst), self-rated (or AI-estimated from a photo on days they didn't rate). The overall rating is the average of sections they rated; section ratings (front of face, left side, right side, neck) are in parentheses. Note when a trigger seems to affect one section (e.g. jawline/neck, or one side, which can point to phone, pillow or sleeping side) more than others.
 
 Daily log (oldest first):
 ${lines.join("\n")}
