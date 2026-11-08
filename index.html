@@ -145,6 +145,25 @@ nav button.on{color:var(--accent);font-weight:600}
 .arow{margin-bottom:10px}
 .arow .an{font-size:12.5px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
 .rates.sm button{height:34px;font-size:13px;border-radius:9px}
+.chip.pick{cursor:pointer;padding:7px 12px;font-size:13.5px;border:1.5px solid var(--line);background:var(--card)}
+.chip.pick.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip.f.pick.on{background:var(--fink);border-color:var(--fink);color:var(--card)}
+.results{background:var(--card);border:1px solid var(--line);border-radius:12px;margin-top:6px;overflow:hidden;box-shadow:var(--shadow)}
+.results button{display:block;width:100%;text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);font-size:14.5px}
+.results button:last-child{border-bottom:0}
+.results small{color:var(--muted)}
+.selrow{display:grid;grid-template-columns:1fr 78px 82px 26px;gap:6px;align-items:center;margin-top:8px;font-size:14px}
+.selrow select{padding:6px 4px;font-size:14px;border-radius:9px}
+.selrow .rm{color:var(--bad);font-size:20px}
+.selrow .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stepper{display:flex;align-items:center;gap:4px}
+.stepper button{width:38px;height:38px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-size:20px;font-weight:600}
+.stepper b{min-width:30px;text-align:center;font-size:17px}
+.subhead{font-size:12px;color:var(--muted);margin:12px 0 2px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.chip.flag{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.inci{font-size:13px;color:var(--muted);line-height:1.6}
+a{color:var(--accent)}
+tr.click{cursor:pointer}
 .toggle input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--accent)}
 </style>
 </head>
@@ -189,10 +208,24 @@ nav button.on{color:var(--accent);font-weight:600}
     <div class="label">How's your skin? <span>0 clear · 10 worst</span></div>
     <div id="rateRows"></div>
 
-    <div class="label">What did you do? <span>products, food, sleep…</span></div>
+    <div class="label">Products <span>tap what you used</span></div>
+    <div class="chips" id="quickProds"></div>
+    <input id="prodSearch" placeholder="Search or add a product…" autocomplete="off" autocapitalize="words" style="margin-top:8px">
+    <div id="prodResults" class="results hidden"></div>
+    <div id="selProds"></div>
+
+    <div class="label">Anything else? <span>talk it out</span></div>
     <button class="mic hidden" id="micBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Tap to talk</span></button>
-    <textarea id="memo" placeholder="e.g. Washed with CeraVe foaming cleanser, pea of tretinoin, then Vanicream. Slept about 5 hours, had pizza and ice cream last night, picked at my chin."></textarea>
-    <div class="hint" id="memoHint">Talk or type. Haiku turns it into a usage table after you save.</div>
+    <textarea id="memo" placeholder="e.g. Slept about 5 hours, stressed about work, had pizza last night, picked at my chin. (Products you mention here get added too.)"></textarea>
+    <div class="hint" id="memoHint">Talk or type. Haiku adds anything you mention to the table after you save.</div>
+
+    <div class="label">Daily</div>
+    <div class="row" style="justify-content:space-between"><span>💧 Water <span class="sub">(glasses)</span></span><div class="stepper"><button id="wMinus" aria-label="Less water">−</button><b id="wVal">–</b><button id="wPlus" aria-label="More water">+</button></div></div>
+    <div class="subhead">Bedding changed today</div><div class="chips" id="bedChips"></div>
+    <div class="subhead">Diet &amp; habits</div><div class="chips" id="dietChips"></div>
+
+    <div class="label">Notes <span>anything else worth remembering</span></div>
+    <textarea id="notes" style="min-height:64px" placeholder="New laundry detergent, very dry weather, derm appointment…"></textarea>
 
     <button class="primary" id="save">Save entry</button>
     <div class="alt"><button id="cancel">Cancel</button></div>
@@ -246,6 +279,11 @@ const AREA_KEYS = AREAS.map(a => a[0]);
 const areaLabel = k => (AREAS.find(a => a[0] === k) || [k, k])[1];
 const photosOf = e => e.photos || (e.photoId ? [{ area: "front", id: e.photoId }] : []);
 const meanOrNull = a => a.length ? mean(a) : null;
+const BEDDING = [["pillowcase","Pillowcase"],["sheets","Sheets"],["towel","Face towel"]];
+const DIET_DEFAULT = ["dairy","sugar/sweets","alcohol","fried/greasy food","whey/protein shake","chocolate","high-GI carbs","poor sleep","stress","worked out","picked skin"];
+const AREA_OPTS = [["all","Whole"],["front","Front"],["left","Left"],["right","Right"],["neck","Neck"]];
+const WHEN_OPTS = [["am",0,"AM"],["pm",0,"PM"],["pm",-1,"Last night"],["other",0,"Today"]];
+const incidecoderSearch = n => "https://incidecoder.com/search?query=" + encodeURIComponent(n);
 const CATS = ["cleanser","toner","serum","treatment","exfoliant","moisturizer","sunscreen","spot treatment","mask","medication","supplement","makeup","other"];
 
 /* ================= local storage (IndexedDB) ================= */
@@ -288,20 +326,21 @@ function hydratePhotos(root=document){
 }
 
 /* ================= Claude API ================= */
-let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true, insArea: "all", histArea: "front" };
+let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, inciLookup: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true, insArea: "all", histArea: "front" };
 async function saveSettings(){ await store.set("settings", settings).catch(()=>{}); }
-async function claude(content, { model, max_tokens = 1500, signal } = {}){
+async function claude(content, { model, max_tokens = 1500, signal, tools, raw } = {}){
   if (!settings.apiKey) throw { code: "no_key", message: "Add your Anthropic API key in Settings." };
   if (!navigator.onLine) throw { code: "offline", message: "Offline" };
   let r;
   try {
     r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", signal,
       headers: { "content-type": "application/json", "x-api-key": settings.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-      body: JSON.stringify({ model: model || settings.parseModel, max_tokens, messages: [{ role: "user", content }] }) });
+      body: JSON.stringify({ model: model || settings.parseModel, max_tokens, messages: [{ role: "user", content }], ...(tools ? { tools } : {}) }) });
   } catch (e) { if (e.name === "AbortError") throw { code: "cancelled" }; throw { code: "network", message: "Network error" }; }
   if (!r.ok) { let m = ""; try { m = (await r.json()).error?.message || ""; } catch {}
     throw { code: r.status === 401 ? "bad_key" : r.status === 429 ? "rate_limited" : r.status === 529 ? "overloaded" : "http_" + r.status, message: m || ("HTTP " + r.status) }; }
   const j = await r.json();
+  if (raw) return j;
   return (j.content || []).filter(c => c.type === "text").map(c => c.text).join("");
 }
 function parseJSON(t){
@@ -321,7 +360,8 @@ let analysis = null;
 let view = "log", histMode = "list", overlayKey = "";
 let lastSavedId = null;
 const LAGS = [{a:1,b:1,l:"Next day"},{a:1,b:3,l:"1–3 days"},{a:4,b:10,l:"4–10 days"},{a:11,b:28,l:"2–4 wks"}];
-const draft = { photos: {}, ratings: {}, active: false };   // photos: {area: {blob,url}}, ratings: {area: n}
+const draft = { photos: {}, ratings: {}, active: false, products: [], water: null, bedding: {}, diet: new Set() };
+let catalog = {};   // lowercase name -> {name, category, url, brand, inci[], actives[], flags[], status}   // photos: {area: {blob,url}}, ratings: {area: n}
 let camArea = "front";
 
 function sortEntries(){ entries.sort((x,y)=> y.ts - x.ts); }
@@ -333,7 +373,7 @@ async function boot(){
   renderAreaTabs(); renderCapShots();
   try { const s = await store.get("settings"); if (s) settings = { ...settings, ...s }; } catch {}
   if (settings.liveCam) startCamera(); else showSysCam();
-  try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; }
+  try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; catalog = await store.get("catalog") || {}; syncCatalog(); }
   catch { $("#banner").innerHTML = `<div class="banner">This browser blocked local storage, so entries can't be saved. Open the app from your home screen icon.</div>`; }
   updateGhost();
   renderBanner();
@@ -376,6 +416,7 @@ function render(){
   else if (view==="products") renderProducts();
   else if (view==="insights") renderInsights();
   if (sheetMode === "entry" && sheetEntryId) renderSheet();
+  if (sheetMode === "product" && sheetProduct) renderProductSheet();
 }
 
 /* ================= camera ================= */
@@ -472,7 +513,7 @@ function openDraft(){
   stopCamera(); draft.active = true;
   $("#capture").classList.add("hidden"); $("#draft").classList.remove("hidden");
   $("#draftShots").innerHTML = shotTiles(draft.photos);
-  renderRateRows();
+  renderRateRows(); renderPicker(); renderDaily();
   renderLastSaved();
 }
 function backToCamera(area){
@@ -485,7 +526,8 @@ function resetDraft(restartCam){
   stopMic();
   for (const p of Object.values(draft.photos)) URL.revokeObjectURL(p.url);
   draft.photos = {}; draft.ratings = {}; draft.active = false; camArea = "front";
-  $("#memo").value = "";
+  draft.products = []; draft.water = null; draft.bedding = {}; draft.diet = new Set();
+  $("#memo").value = ""; $("#notes").value = ""; $("#prodSearch").value = ""; renderSearch();
   $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
   renderAreaTabs(); renderCapShots(); updateGhost();
   if (restartCam !== false && settings.liveCam && view === "log") startCamera();
@@ -503,12 +545,124 @@ function renderRateRows(){
   el.onclick = e => { const b = e.target.closest("[data-ra]"); if (!b) return; const a = b.dataset.ra, v = +b.dataset.rv; if (draft.ratings[a] === v) delete draft.ratings[a]; else draft.ratings[a] = v; renderRateRows(); };
 }
 
+/* ================= product catalog + quick picker ================= */
+const catKey = n => normName(n).toLowerCase();
+function ensureCatalog(name, category){
+  const k = catKey(name); if (!k) return false;
+  const c = catalog[k];
+  if (!c) { catalog[k] = { name: normName(name), category: category || "other", url: "", brand: "", inci: [], actives: [], flags: [], status: "new" }; return true; }
+  if (category && category !== "other" && (!c.category || c.category === "other")) { c.category = category; return true; }
+  return false;
+}
+async function saveCatalog(){ await store.set("catalog", catalog).catch(()=>{}); }
+function syncCatalog(){ let ch = false; for (const e of entries) for (const p of e.products||[]) if (p.name && ensureCatalog(p.name, p.category)) ch = true; if (ch) saveCatalog(); }
+function productStats(){
+  const now = ymd(Date.now()), st = new Map();
+  for (const e of entries) for (const p of e.products||[]) {
+    const k = catKey(p.name); if (!k) continue;
+    const s = st.get(k) || { days: new Set(), recent: new Set(), last: "" , times: {} };
+    s.days.add(e.date); if (dayDiff(e.date, now) <= 30) s.recent.add(e.date); if (e.date > s.last) s.last = e.date;
+    s.times[p.time] = (s.times[p.time]||0) + 1;
+    st.set(k, s);
+  }
+  return st;
+}
+function topProducts(n = 8){
+  const st = productStats();
+  return Object.keys(catalog).sort((a,b) => {
+    const A = st.get(a), B = st.get(b);
+    return (B?.recent.size||0) - (A?.recent.size||0) || (B?.days.size||0) - (A?.days.size||0) || (B?.last||"").localeCompare(A?.last||"");
+  }).slice(0, n);
+}
+const defaultTime = () => new Date().getHours() < 15 ? "am" : "pm";
+function togglePick(name){
+  const k = catKey(name), i = draft.products.findIndex(p => catKey(p.name) === k);
+  if (i >= 0) draft.products.splice(i, 1);
+  else { const c = catalog[k]; draft.products.push({ name: c ? c.name : normName(name), category: c?.category || "other", time: defaultTime(), dayOffset: 0, area: "all", amount: "", note: "", src: "pick" }); }
+  renderPicker();
+}
+function renderPicker(){
+  const picked = new Set(draft.products.map(p => catKey(p.name)));
+  const top = topProducts(8);
+  $("#quickProds").innerHTML = top.length
+    ? top.map(k => `<button class="chip pick${picked.has(k)?" on":""}" data-pick="${esc(k)}">${esc(catalog[k].name)}</button>`).join("")
+    : `<span class="sub">Your most-used products will show up here. Search to add your first ones.</span>`;
+  const opt = (list, v) => list.map(([val,,l]) => `<option value="${val}"${val===v?" selected":""}>${l}</option>`).join("");
+  $("#selProds").innerHTML = draft.products.map((p,i) => `<div class="selrow"><span class="nm">${esc(p.name)}</span>
+    <select data-sp="${i}" data-k="when">${WHEN_OPTS.map(([t,o,l])=>`<option value="${t}|${o}"${t===p.time&&o===(p.dayOffset||0)?" selected":""}>${l}</option>`).join("")}</select>
+    <select data-sp="${i}" data-k="area">${AREA_OPTS.map(([a,l])=>`<option value="${a}"${a===(p.area||"all")?" selected":""}>${l}</option>`).join("")}</select>
+    <button class="rm" data-sprm="${i}" aria-label="Remove">×</button></div>`).join("");
+}
+$("#quickProds").addEventListener("click", e => { const b = e.target.closest("[data-pick]"); if (b) togglePick(catalog[b.dataset.pick].name); });
+$("#selProds").addEventListener("change", e => { const t = e.target; if (t.dataset.sp == null) return; const p = draft.products[+t.dataset.sp];
+  if (t.dataset.k === "when") { const [tt,oo] = t.value.split("|"); p.time = tt; p.dayOffset = +oo; } else p.area = t.value; });
+$("#selProds").addEventListener("click", e => { const b = e.target.closest("[data-sprm]"); if (!b) return; draft.products.splice(+b.dataset.sprm, 1); renderPicker(); });
+function renderSearch(){
+  const q = $("#prodSearch").value.trim(), box = $("#prodResults");
+  if (!q) { box.classList.add("hidden"); box.innerHTML = ""; return; }
+  const ql = q.toLowerCase(), words = ql.split(/\s+/);
+  const st = productStats();
+  const hits = Object.keys(catalog).filter(k => words.every(w => k.includes(w) || (catalog[k].brand||"").toLowerCase().includes(w)))
+    .sort((a,b) => (st.get(b)?.days.size||0) - (st.get(a)?.days.size||0)).slice(0, 6);
+  const picked = new Set(draft.products.map(p => catKey(p.name)));
+  let h = hits.map(k => `<button data-res="${esc(k)}">${picked.has(k)?"✓ ":""}${esc(catalog[k].name)} <small>· ${esc(catalog[k].category||"")}</small></button>`).join("");
+  if (!catalog[ql]) h += `<button data-new="1">＋ Add “${esc(q)}”</button>`;
+  box.innerHTML = h; box.classList.remove("hidden");
+}
+$("#prodSearch").addEventListener("input", renderSearch);
+$("#prodSearch").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); const first = $("#prodResults button"); if (first) first.click(); } });
+$("#prodResults").addEventListener("click", async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.res) togglePick(catalog[b.dataset.res].name);
+  else if (b.dataset.new) { const name = $("#prodSearch").value.trim(); if (ensureCatalog(name)) { await saveCatalog(); processQueue(); } togglePick(name); }
+  $("#prodSearch").value = ""; renderSearch();
+});
+
+/* ================= daily: water, bedding, diet ================= */
+function dietOptions(){
+  const counts = new Map();
+  for (const e of entries) for (const f of e.factors||[]) if (f.name) counts.set(f.name, (counts.get(f.name)||0) + 1);
+  const learned = [...counts.entries()].filter(([n]) => !DIET_DEFAULT.includes(n) && !/^low water|days old$/.test(n)).sort((a,b)=>b[1]-a[1]).slice(0,5).map(x=>x[0]);
+  return DIET_DEFAULT.concat(learned);
+}
+function renderDaily(){
+  $("#wVal").textContent = draft.water == null ? "–" : draft.water;
+  $("#bedChips").innerHTML = BEDDING.map(([k,l]) => `<button class="chip pick${draft.bedding[k]?" on":""}" data-bed="${k}">${l}</button>`).join("");
+  $("#dietChips").innerHTML = dietOptions().map(n => `<button class="chip f pick${draft.diet.has(n)?" on":""}" data-diet="${esc(n)}">${esc(n)}</button>`).join("");
+}
+$("#wPlus").addEventListener("click", () => { draft.water = draft.water == null ? 1 : Math.min(30, draft.water + 1); renderDaily(); });
+$("#wMinus").addEventListener("click", () => { if (draft.water == null) return; draft.water = draft.water <= 0 ? null : draft.water - 1; renderDaily(); });
+$("#bedChips").addEventListener("click", e => { const b = e.target.closest("[data-bed]"); if (!b) return; draft.bedding[b.dataset.bed] = !draft.bedding[b.dataset.bed]; renderDaily(); });
+$("#dietChips").addEventListener("click", e => { const b = e.target.closest("[data-diet]"); if (!b) return; const n = b.dataset.diet; draft.diet.has(n) ? draft.diet.delete(n) : draft.diet.add(n); renderDaily(); });
+
+/* ================= INCIDecoder lookup ================= */
+async function lookupInci(k){
+  const c = catalog[k]; if (!c) return;
+  const prompt = `Find the skincare product "${c.name}" on INCIDecoder (incidecoder.com) and report its ingredient (INCI) list from the product page.
+Reply with only JSON, no prose:
+{"found": true|false, "name": "product name as INCIDecoder lists it", "brand": "", "url": "https://incidecoder.com/products/...", "category": "${CATS.join("|")}", "inci": ["Aqua", "Glycerin", "..."], "actives": ["short names of key active ingredients, e.g. Niacinamide 4%"], "flags": ["ingredients commonly flagged as potentially pore-clogging/comedogenic or irritating, if any"]}
+Use the exact product (right variant/size doesn't matter). If you can't find it on incidecoder.com, reply {"found": false}.`;
+  const j = await claude(prompt, { model: settings.parseModel, max_tokens: 3000, raw: true,
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3, allowed_domains: ["incidecoder.com"] }] });
+  const texts = (j.content || []).filter(b => b.type === "text").map(b => b.text);
+  let r = null;
+  for (let i = texts.length - 1; i >= 0 && !r; i--) { try { r = parseJSON(texts[i]); } catch {} }
+  if (!r) { try { r = parseJSON(texts.join("\n")); } catch {} }
+  if (!r || !r.found || !Array.isArray(r.inci) || !r.inci.length) { c.status = "notfound"; c.checked = Date.now(); await saveCatalog(); return; }
+  const url = String(r.url || ""); 
+  Object.assign(c, { url: /^https:\/\/(www\.)?incidecoder\.com\//.test(url) ? url : "", brand: String(r.brand||"").slice(0,60), matchedName: String(r.name||"").slice(0,120),
+    inci: r.inci.map(String).map(x=>x.trim()).filter(Boolean).slice(0,80), actives: (r.actives||[]).map(String).slice(0,10), flags: (r.flags||[]).map(String).slice(0,10),
+    status: "done", checked: Date.now() });
+  if (CATS.includes(r.category) && (!c.category || c.category === "other")) c.category = r.category;
+  await saveCatalog();
+}
+
 /* ================= voice (live speech-to-text) ================= */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let rec = null, recBase = "", recOn = false;
 function setupMic(){
   const btn = $("#micBtn");
-  if (!SR) { $("#memoHint").textContent = "Tap the 🎙 on your keyboard to dictate. Haiku turns it into a usage table after you save."; return; }
+  if (!SR) { $("#memoHint").textContent = "Tap the 🎙 on your keyboard to dictate. Haiku adds anything you mention to the table after you save."; return; }
   btn.classList.remove("hidden");
   btn.onclick = () => recOn ? stopMic() : startMic();
 }
@@ -536,18 +690,22 @@ function paintMic(){ const b = $("#micBtn"); b.classList.toggle("rec", recOn); b
 $("#save").addEventListener("click", saveDraft);
 async function saveDraft(){
   stopMic();
-  const memo = $("#memo").value.trim();
+  const memo = $("#memo").value.trim(), notes = $("#notes").value.trim();
   const shotAreas = AREA_KEYS.filter(k => draft.photos[k]);
   const areaRatings = {}; for (const k of AREA_KEYS) if (draft.ratings[k] != null) areaRatings[k] = draft.ratings[k];
-  if (!shotAreas.length && !memo && !Object.keys(areaRatings).length) { toast("Add a photo, rating, or memo first"); return; }
+  const bedding = {}; for (const [k] of BEDDING) if (draft.bedding[k]) bedding[k] = true;
+  const products = draft.products.map(p => ({ ...p }));
+  const factors = [...draft.diet].map(n => ({ name: n, dayOffset: 0, detail: "", src: "pick" }));
+  if (!shotAreas.length && !memo && !notes && !products.length && !factors.length && draft.water == null && !Object.keys(bedding).length && !Object.keys(areaRatings).length) { toast("Add a photo, rating, or something you did first"); return; }
   const now = Date.now(), id = uidGen(), photos = [];
   for (const k of shotAreas) {
     const pid = "p_" + id.slice(2) + "_" + k;
     try { await store.putPhoto(pid, draft.photos[k].blob); photos.push({ area: k, id: pid }); } catch { toast("Couldn't store a photo"); }
   }
-  const e = { id, ts: now, date: ymd(now), photos, areaRatings, rating: meanOrNull(Object.values(areaRatings)), memo, products: [], factors: [], skin: "", summary: "", ai: null,
+  const e = { id, ts: now, date: ymd(now), photos, areaRatings, rating: meanOrNull(Object.values(areaRatings)), memo, notes, products, factors, water: draft.water, bedding, skin: "", summary: "", ai: null,
               needsParse: !!memo, needsAi: !!(photos.length && settings.aiPhoto), status: memo ? "queued" : "ok", error: "" };
   try { await putEntry(e); } catch { toast("Couldn't save. Storage may be full."); return; }
+  let ch = false; for (const p of products) if (ensureCatalog(p.name, p.category)) ch = true; if (ch) saveCatalog();
   lastSavedId = id;
   resetDraft(true);
   toast("Saved");
@@ -561,7 +719,7 @@ async function processQueue(){
     for (const e of entries.slice().filter(x => x.needsParse || x.needsAi).reverse()) {
       if (e.needsParse) {
         await patchEntry(e.id, { status: "parsing" });
-        try { const p = await parseMemo(e.memo, e.ts); await patchEntry(e.id, { ...p, needsParse: false, status: "ok", error: "" }); }
+        try { const p = await parseMemo(e.memo, e.ts); await patchEntry(e.id, { ...mergeParsed(e, p), needsParse: false, status: "ok", error: "" }); syncCatalog(); }
         catch (err) {
           const transient = ["offline","network","rate_limited","overloaded"].includes(err.code) || String(err.code).startsWith("http_5");
           const keyProblem = err.code === "bad_key" || err.code === "no_key";
@@ -579,7 +737,30 @@ async function processQueue(){
         catch (err) { if (["offline","network","rate_limited","overloaded"].includes(err.code)) break; await patchEntry(e.id, { needsAi: false }); }
       }
     }
+    if (settings.inciLookup) {
+      for (const k of Object.keys(catalog).filter(k => catalog[k].status === "new").slice(0, 5)) {
+        catalog[k].status = "looking"; renderIfProducts();
+        try { await lookupInci(k); }
+        catch (err) {
+          catalog[k].status = ["offline","network","rate_limited","overloaded"].includes(err.code) ? "new" : "error";
+          catalog[k].error = errText(err); await saveCatalog(); renderIfProducts();
+          if (catalog[k].status === "new") break;
+        }
+        renderIfProducts();
+      }
+    }
   } finally { queueRunning = false; }
+}
+function renderIfProducts(){ if (view === "products") renderProducts(); if (sheetMode === "product") renderProductSheet(); }
+function mergeParsed(e, p){
+  const picked = (e.products||[]).filter(x => x.src === "pick" || x.src === "edit");
+  const seen = new Set(picked.map(x => catKey(x.name)));
+  const products = picked.concat(p.products.filter(x => !seen.has(catKey(x.name))));
+  const pf = (e.factors||[]).filter(x => x.src === "pick" || x.src === "edit");
+  const fs = new Set(pf.map(x => x.name.toLowerCase()));
+  const factors = pf.concat(p.factors.filter(x => !fs.has(x.name.toLowerCase())));
+  const bedding = { ...(e.bedding||{}) }; for (const [k] of BEDDING) if (p.bedding?.[k]) bedding[k] = true;
+  return { products, factors, bedding, water: e.water ?? p.water ?? null, skin: p.skin, summary: p.summary };
 }
 function knownNames(){
   const p = new Map(), f = new Map();
@@ -597,7 +778,9 @@ Memo:
 """${memo.slice(0, 6000)}"""
 
 Reply with only JSON, no prose:
-{"products":[{"name":"Brand Product Name","category":"${CATS.join("|")}","time":"am"|"pm"|"other","dayOffset":0,"amount":"","note":""}],
+{"products":[{"name":"Brand Product Name","category":"${CATS.join("|")}","time":"am"|"pm"|"other","dayOffset":0,"area":"all"|"front"|"left"|"right"|"neck","amount":"","note":""}],
+ "water_glasses": number or null,
+ "bedding": {"pillowcase": false, "sheets": false, "towel": false},
  "factors":[{"name":"short lowercase factor","dayOffset":0,"detail":""}],
  "skin":"what they say about their skin today, short, or empty",
  "summary":"one short line"}
@@ -606,14 +789,18 @@ Rules:
 - products: anything applied to the face/skin or taken for skin (topicals, prescriptions like tretinoin/spironolactone/antibiotics, supplements, makeup, pimple patches). Title Case, brand first when known. Fix obvious dictation errors in product names. Omit products they explicitly skipped.
 - factors: lifestyle/environment that might affect acne: sleep (e.g. "poor sleep" with detail "5 hrs"), stress, specific foods/drinks (dairy, sugar, alcohol, fried food, whey…), exercise/sweat, period/cycle, picking, touching face, slept in makeup, new pillowcase, shaving, sun, travel, illness, new medication. Use short canonical names like "dairy", "poor sleep", "picked skin". Only include what was actually said.
 - dayOffset: -1 if it happened yesterday / last night, else 0. time "pm" for night/evening routine.
+- area: where a product was applied if they say so (e.g. "only on my left side" -> "left"; "on my neck" -> "neck"), else "all".
+- water_glasses: glasses of water they mention drinking (1 bottle ≈ 2 glasses, 1 liter ≈ 4), else null. bedding: true only for what they say they changed/washed today.
 - Empty arrays if nothing applies.`;
   const r = parseJSON(await claude(prompt, { model: settings.parseModel, max_tokens: 1500 }));
   const prods = Array.isArray(r?.products) ? r.products : [], facs = Array.isArray(r?.factors) ? r.factors : [];
   return {
     products: prods.filter(x=>x&&x.name).slice(0,40).map(x => ({ name: normName(x.name).slice(0,80), category: CATS.includes(x.category) ? x.category : "other",
-      time: ["am","pm","other"].includes(x.time) ? x.time : "other", dayOffset: x.dayOffset === -1 ? -1 : 0, amount: String(x.amount||"").slice(0,60), note: String(x.note||"").slice(0,120) })),
+      time: ["am","pm","other"].includes(x.time) ? x.time : "other", dayOffset: x.dayOffset === -1 ? -1 : 0, area: AREA_KEYS.includes(x.area) ? x.area : "all", amount: String(x.amount||"").slice(0,60), note: String(x.note||"").slice(0,120) })),
     factors: facs.filter(x=>x&&x.name).slice(0,30).map(x => ({ name: normName(x.name).toLowerCase().slice(0,60), dayOffset: x.dayOffset === -1 ? -1 : 0, detail: String(x.detail||"").slice(0,80) })),
-    skin: String(r?.skin||"").slice(0,300), summary: String(r?.summary||"").slice(0,200)
+    skin: String(r?.skin||"").slice(0,300), summary: String(r?.summary||"").slice(0,200),
+    water: Number.isFinite(+r?.water_glasses) && r?.water_glasses !== null ? Math.max(0, Math.min(30, Math.round(+r.water_glasses))) : null,
+    bedding: { pillowcase: !!r?.bedding?.pillowcase, sheets: !!r?.bedding?.sheets, towel: !!r?.bedding?.towel }
   };
 }
 async function assessPhotos(shots){
@@ -665,11 +852,13 @@ function usageTable(e){
   if (e.status === "parsing") return `<div class="sub"><span class="spin"></span> Haiku is building your table…</div>`;
   if (e.status === "queued") return `<div class="sub">${settings.apiKey ? (navigator.onLine ? `<span class="spin"></span> Queued…` : "Offline: will parse when you're back online.") : `Add your API key in <button data-settings style="text-decoration:underline">Settings</button> to parse this memo.`}</div>`;
   if (e.status === "error" && !p.length && !f.length) return `<div class="sub">Couldn't parse: ${esc(e.error)}${e.needsParse?" (will retry)":""}</div>`;
-  if (!p.length && !f.length) return e.memo ? `<div class="sub">No products or factors found in the memo.</div>` : "";
+  const daily = [e.water != null ? `💧 ${e.water} glasses` : "", ...BEDDING.filter(([k]) => e.bedding?.[k]).map(([,l]) => `🛏 new ${l.toLowerCase()}`)].filter(Boolean);
+  const tail = (daily.length ? `<div class="chips" style="margin-top:8px">${daily.map(d=>`<span class="chip">${esc(d)}</span>`).join("")}</div>` : "") + (e.notes ? `<div class="sub" style="margin-top:8px">📝 ${esc(e.notes)}</div>` : "");
+  if (!p.length && !f.length) return (e.memo ? `<div class="sub">No products or factors found in the memo.</div>` : "") + tail;
   let h = "";
-  if (p.length) h += `<div class="tablewrap"><table><tr><th>Product</th><th>Type</th><th>When</th></tr>${p.map(x=>`<tr><td>${esc(x.name)}${x.amount?` <span class="sub">· ${esc(x.amount)}</span>`:""}</td><td>${esc(x.category)}</td><td>${x.time==="other"?"":esc(x.time.toUpperCase())}${x.dayOffset===-1?" <span class='sub'>(yday)</span>":""}</td></tr>`).join("")}</table></div>`;
+  if (p.length) h += `<div class="tablewrap"><table><tr><th>Product</th><th>Type</th><th>When</th></tr>${p.map(x=>`<tr><td>${esc(x.name)}${x.area&&x.area!=="all"?` <span class="chip" style="padding:1px 7px">${esc(areaLabel(x.area))} only</span>`:""}${x.amount?` <span class="sub">· ${esc(x.amount)}</span>`:""}</td><td>${esc(x.category)}</td><td>${x.time==="other"?"":esc(x.time.toUpperCase())}${x.dayOffset===-1?" <span class='sub'>(yday)</span>":""}</td></tr>`).join("")}</table></div>`;
   if (f.length) h += `<div class="chips" style="margin-top:10px">${f.map(x=>`<span class="chip f">${esc(x.name)}${x.detail?` · ${esc(x.detail)}`:""}${x.dayOffset===-1?" (yday)":""}</span>`).join("")}</div>`;
-  return h;
+  return h + tail;
 }
 function renderLastSaved(){
   const el = $("#lastSaved");
@@ -727,13 +916,13 @@ $("#sheet").addEventListener("click", e => { if (e.target.id === "sheet") closeS
 function openSheet(id){
   const e = entries.find(x=>x.id===id); if (!e) return;
   sheetMode = "entry"; sheetEntryId = id; delArm = false;
-  editState = { rating: e.rating, areaRatings: { ...(e.areaRatings||{}) }, memo: e.memo||"", products: structuredClone(e.products||[]), factors: structuredClone(e.factors||[]), dirty: false };
+  editState = { rating: e.rating, areaRatings: { ...(e.areaRatings||{}) }, water: e.water ?? null, bedding: { ...(e.bedding||{}) }, notes: e.notes||"", memo: e.memo||"", products: structuredClone(e.products||[]), factors: structuredClone(e.factors||[]), dirty: false };
   showSheet(); renderSheet();
 }
 function renderSheet(){
   const e = entries.find(x=>x.id===sheetEntryId); if (!e) { closeSheet(); return; }
   const s = editState;
-  if (!s.dirty) { s.products = structuredClone(e.products||[]); s.factors = structuredClone(e.factors||[]); s.memo = e.memo||""; s.rating = e.rating; s.areaRatings = { ...(e.areaRatings||{}) }; }
+  if (!s.dirty) { s.products = structuredClone(e.products||[]); s.factors = structuredClone(e.factors||[]); s.memo = e.memo||""; s.rating = e.rating; s.areaRatings = { ...(e.areaRatings||{}) }; s.water = e.water ?? null; s.bedding = { ...(e.bedding||{}) }; s.notes = e.notes||""; }
   const a = e.ai;
   const catOpts = v => CATS.map(c=>`<option${c===v?" selected":""}>${c}</option>`).join("");
   const timeOpts = (t, o) => [["am",0,"AM"],["pm",0,"PM"],["pm",-1,"Last night"],["am",-1,"Yday AM"],["other",0,"Today"],["other",-1,"Yesterday"]].map(([tt,oo,l])=>`<option value="${tt}|${oo}"${tt===t&&oo===(o||0)?" selected":""}>${l}</option>`).join("");
@@ -745,11 +934,16 @@ function renderSheet(){
     <div class="label">Your ratings <span>0 clear · 10 worst</span></div>
     <div id="shRates"></div>
     <div class="label">Products</div>
-    <div>${s.products.map((p,i)=>`<div class="edit-row"><input data-p="${i}" data-k="name" value="${esc(p.name)}" placeholder="Product"><select data-p="${i}" data-k="when">${timeOpts(p.time,p.dayOffset)}</select><button class="rm" data-rmp="${i}">×</button><select class="wide" data-p="${i}" data-k="category">${catOpts(p.category)}</select></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
+    <div>${s.products.map((p,i)=>`<div class="edit-row"><input data-p="${i}" data-k="name" value="${esc(p.name)}" placeholder="Product"><select data-p="${i}" data-k="when">${timeOpts(p.time,p.dayOffset)}</select><button class="rm" data-rmp="${i}">×</button><div class="wide" style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><select data-p="${i}" data-k="category">${catOpts(p.category)}</select><select data-p="${i}" data-k="area">${AREA_OPTS.map(([a,l])=>`<option value="${a}"${a===(p.area||"all")?" selected":""}>${l==="Whole"?"Whole face":l+" only"}</option>`).join("")}</select></div></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
     <button class="btn small" id="addP">+ Product</button>
     <div class="label">Factors <span>food, sleep, stress…</span></div>
     <div>${s.factors.map((f,i)=>`<div class="edit-row"><input data-f="${i}" data-k="name" value="${esc(f.name)}" placeholder="e.g. dairy"><select data-f="${i}" data-k="day"><option value="0"${!f.dayOffset?" selected":""}>Today</option><option value="-1"${f.dayOffset===-1?" selected":""}>Yesterday</option></select><button class="rm" data-rmf="${i}">×</button></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
     <button class="btn small" id="addF">+ Factor</button>
+    <div class="label">Daily</div>
+    <div class="row" style="justify-content:space-between"><span>💧 Water <span class="sub">(glasses)</span></span><input id="shWater" type="number" inputmode="numeric" min="0" max="30" value="${s.water ?? ""}" placeholder="–" style="width:80px;text-align:center"></div>
+    <div class="subhead">Bedding changed</div><div class="chips">${BEDDING.map(([k,l])=>`<button class="chip pick${s.bedding[k]?" on":""}" data-sbed="${k}">${l}</button>`).join("")}</div>
+    <div class="label">Notes</div>
+    <textarea id="shNotes" style="min-height:64px">${esc(s.notes)}</textarea>
     <div class="label">Memo</div>
     <textarea id="shMemo">${esc(s.memo)}</textarea>
     <div class="row" style="margin-top:8px"><button class="btn small" id="reparse">${e.status==="parsing"?`<span class="spin"></span> Parsing…`:"Re-parse memo with Haiku"}</button></div>
@@ -768,10 +962,13 @@ function renderSheet(){
   const onEdit = ev => {
     const t = ev.target; if (!t.matches("input,select,textarea")) return; s.dirty = true;
     if (t.id === "shMemo") { s.memo = t.value; return; }
+    if (t.id === "shNotes") { s.notes = t.value; return; }
+    if (t.id === "shWater") { const v = parseInt(t.value, 10); s.water = Number.isFinite(v) ? Math.max(0, Math.min(30, v)) : null; return; }
     if (t.dataset.p != null) { const p = s.products[+t.dataset.p]; if (t.dataset.k==="when") { const [tt,oo]=t.value.split("|"); p.time=tt; p.dayOffset=+oo; } else p[t.dataset.k] = t.value; }
     if (t.dataset.f != null) { const f = s.factors[+t.dataset.f]; if (t.dataset.k==="day") f.dayOffset = +t.value; else f.name = t.value; }
   };
   $("#sheetPanel").oninput = onEdit; $("#sheetPanel").onchange = onEdit;
+  $("#sheetPanel").querySelectorAll("[data-sbed]").forEach(b=>b.onclick=()=>{ s.bedding[b.dataset.sbed] = !s.bedding[b.dataset.sbed]; if (!s.bedding[b.dataset.sbed]) delete s.bedding[b.dataset.sbed]; s.dirty=true; renderSheet(); });
   $("#sheetPanel").querySelectorAll("[data-rmp]").forEach(b=>b.onclick=()=>{ s.products.splice(+b.dataset.rmp,1); s.dirty=true; renderSheet(); });
   $("#sheetPanel").querySelectorAll("[data-rmf]").forEach(b=>b.onclick=()=>{ s.factors.splice(+b.dataset.rmf,1); s.dirty=true; renderSheet(); });
   $("#addP").onclick = () => { s.products.push({name:"",category:"other",time:"other",dayOffset:0,amount:"",note:""}); s.dirty=true; renderSheet(); };
@@ -784,10 +981,11 @@ function renderSheet(){
     processQueue();
   };
   $("#shSave").onclick = async () => {
-    const products = s.products.filter(p=>normName(p.name)).map(p=>({...p, name: normName(p.name)}));
-    const factors = s.factors.filter(f=>normName(f.name)).map(f=>({...f, name: normName(f.name).toLowerCase()}));
+    const products = s.products.filter(p=>normName(p.name)).map(p=>({...p, name: normName(p.name), src: p.src || "edit"}));
+    const factors = s.factors.filter(f=>normName(f.name)).map(f=>({...f, name: normName(f.name).toLowerCase(), src: f.src || "edit"}));
+    let ch = false; for (const p of products) if (ensureCatalog(p.name, p.category)) ch = true; if (ch) { saveCatalog(); processQueue(); }
     const hasArea = Object.keys(s.areaRatings).length > 0;
-    try { await patchEntry(e.id, { areaRatings: { ...s.areaRatings }, rating: hasArea ? meanOrNull(Object.values(s.areaRatings)) : (e.areaRatings ? null : s.rating), memo: s.memo.trim(), products, factors, ...(e.status==="error"&&!e.needsParse?{status:"ok"}:{}) }); toast("Saved"); closeSheet(); }
+    try { await patchEntry(e.id, { areaRatings: { ...s.areaRatings }, rating: hasArea ? meanOrNull(Object.values(s.areaRatings)) : (e.areaRatings ? null : s.rating), memo: s.memo.trim(), notes: s.notes.trim(), water: s.water, bedding: { ...s.bedding }, products, factors, ...(e.status==="error"&&!e.needsParse?{status:"ok"}:{}) }); toast("Saved"); closeSheet(); }
     catch { toast("Couldn't save"); }
   };
   $("#shDel").onclick = async () => {
@@ -822,6 +1020,7 @@ async function renderSettings(){
     </div>
     <div class="card">
       <label class="toggle"><span>AI acne estimate from each photo<div class="sub">Fills in a score on days you don't rate</div></span><input type="checkbox" id="stAiPhoto"${settings.aiPhoto?" checked":""}></label>
+      <label class="toggle"><span>Look up ingredients on INCIDecoder<div class="sub">Uses Claude's web search when you add a new product</div></span><input type="checkbox" id="stInci"${settings.inciLookup?" checked":""}></label>
       <label class="toggle"><span>Open camera on launch<div class="sub">Turn off to use the system camera</div></span><input type="checkbox" id="stCam"${settings.liveCam?" checked":""}></label>
     </div>
     <div class="card">
@@ -835,6 +1034,7 @@ async function renderSettings(){
   $("#stParse").onchange = ev => { settings.parseModel = ev.target.value; saveSettings(); };
   $("#stAnalysis").onchange = ev => { settings.analysisModel = ev.target.value; saveSettings(); };
   $("#stAiPhoto").onchange = ev => { settings.aiPhoto = ev.target.checked; saveSettings(); };
+  $("#stInci").onchange = ev => { settings.inciLookup = ev.target.checked; saveSettings(); if (settings.inciLookup) processQueue(); };
   $("#stCam").onchange = ev => { settings.liveCam = ev.target.checked; saveSettings(); if (settings.liveCam) { if (view==="log") startCamera(); } else { stopCamera(); showSysCam(); } };
   $("#stTest").onclick = async () => {
     settings.apiKey = $("#stKey").value.trim(); await saveSettings(); renderBanner();
@@ -847,7 +1047,7 @@ async function renderSettings(){
   $("#stCsv").onclick = async () => { try { await navigator.clipboard.writeText(toCsv()); toast("Copied. Paste into Sheets or Excel."); } catch { toast("Couldn't copy"); } };
   $("#stWipe").onclick = async () => {
     if (!wipeArm) { wipeArm = true; renderSettings(); return; }
-    await store.clearAll(); const key = settings.apiKey; entries = []; analysis = null; lastSavedId = null;
+    await store.clearAll(); const key = settings.apiKey; entries = []; analysis = null; catalog = {}; lastSavedId = null;
     settings.apiKey = key; await saveSettings(); photoURLs.forEach(u=>URL.revokeObjectURL(u)); photoURLs.clear();
     wipeArm = false; closeSheet(); updateGhost(); render(); toast("Erased");
   };
@@ -856,7 +1056,7 @@ async function exportBackup(){
   toast("Preparing backup…", 8000);
   const photos = {};
   for (const e of entries) for (const p of photosOf(e)) { const b = await store.getPhoto(p.id).catch(()=>null); if (b) photos[p.id] = await blobToB64(b); }
-  const json = JSON.stringify({ app: "skinlog", version: 1, exported: Date.now(), entries, analysis, photos });
+  const json = JSON.stringify({ app: "skinlog", version: 2, exported: Date.now(), entries, analysis, catalog, photos });
   const file = new File([json], `skinlog-backup-${ymd(Date.now())}.json`, { type: "application/json" });
   try {
     if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: "Skin Log backup" }); toast("Backup ready"); return; }
@@ -876,6 +1076,8 @@ $("#importFile").addEventListener("change", async ev => {
     }
     for (const e of data.entries) { if (!e || !e.id) continue; if (!entries.some(x=>x.id===e.id)) { entries.push(e); n++; } await store.putEntry(entries.find(x=>x.id===e.id)); }
     if (data.analysis && !analysis) { analysis = data.analysis; await store.set("analysis", analysis); }
+    for (const [k, c] of Object.entries(data.catalog || {})) if (!catalog[k] || (c.status === "done" && catalog[k].status !== "done")) catalog[k] = c;
+    syncCatalog(); await saveCatalog();
     sortEntries(); updateGhost(); render(); if (sheetMode === "settings") renderSettings(); toast(`Imported ${n} new entr${n===1?"y":"ies"}`);
   } catch { toast("That doesn't look like a Skin Log backup"); }
 });
@@ -895,20 +1097,34 @@ function dailyRatings(area = "all"){
   for (const [d, v] of m) out.set(d, v.you.length ? mean(v.you) : mean(v.ai));
   return out;
 }
+const BED_LIMITS = { pillowcase: [4, "pillowcase 4+ days old"], sheets: [8, "sheets 8+ days old"], towel: [3, "face towel 3+ days old"] };
 function exposureMap(){
-  const ex = new Map(), observed = new Set(), meta = new Map();
+  const ex = new Map(), observed = new Set(), meta = new Map();   // ex: key -> Map(date -> Set(area))
+  const put = (type, name, d, area, category) => {
+    const k = keyOf(type, name);
+    if (!ex.has(k)) ex.set(k, new Map());
+    const m = ex.get(k); if (!m.has(d)) m.set(d, new Set()); m.get(d).add(area || "all");
+    const mt = meta.get(k) || { type, name, category, first: d, last: d };
+    if (d < mt.first) mt.first = d; if (d > mt.last) mt.last = d; if (category) mt.category = category; mt.name = name;
+    meta.set(k, mt);
+  };
+  const changes = { pillowcase: [], sheets: [], towel: [] };
   for (const e of entries.slice().reverse()) {
     observed.add(e.date);
-    const add = (type, x) => {
-      const k = keyOf(type, x.name), d = addDays(e.date, x.dayOffset || 0);
-      observed.add(d);
-      if (!ex.has(k)) ex.set(k, new Set()); ex.get(k).add(d);
-      const m = meta.get(k) || { type, name: x.name, category: x.category, first: d, last: d };
-      if (d < m.first) m.first = d; if (d > m.last) m.last = d; if (x.category) m.category = x.category; m.name = x.name;
-      meta.set(k, m);
-    };
-    for (const p of e.products||[]) if (p.name) add("p", p);
-    for (const f of e.factors||[]) if (f.name) add("f", f);
+    for (const p of e.products||[]) if (p.name) { const d = addDays(e.date, p.dayOffset || 0); observed.add(d); put("p", p.name, d, p.area, p.category); }
+    for (const f of e.factors||[]) if (f.name) { const d = addDays(e.date, f.dayOffset || 0); observed.add(d); put("f", f.name, d, "all"); }
+    if (e.water != null && e.water < 5) put("f", "low water (<5 glasses)", e.date, "all");
+    for (const k of Object.keys(changes)) if (e.bedding?.[k]) changes[k].push(e.date);
+  }
+  // derived: how old the bedding was on each logged day (only once a change has been logged)
+  for (const [k, dates] of Object.entries(changes)) {
+    if (!dates.length) continue;
+    dates.sort();
+    const [limit, label] = BED_LIMITS[k];
+    for (const d of observed) {
+      let last = null; for (const c of dates) { if (c <= d) last = c; else break; }
+      if (last && dayDiff(last, d) >= limit) put("f", label, d, "all");
+    }
   }
   return { ex, observed, meta };
 }
@@ -919,7 +1135,8 @@ function computeEffects(lag, area = "all"){
     for (const [D, r] of ratings) {
       const win = []; for (let i = lag.a; i <= lag.b; i++) win.push(addDays(D, -i));
       if (!win.some(w => observed.has(w))) continue;
-      (win.some(w => dates.has(w)) ? yes : no).push(r);
+      const hit = w => { const a = dates.get(w); return !!a && (area === "all" || a.has("all") || a.has(area)); };
+      (win.some(hit) ? yes : no).push(r);
     }
     if (yes.length < 2 || no.length < 2) continue;
     const delta = mean(yes) - mean(no);
@@ -940,30 +1157,83 @@ function renderProducts(){
   const { ex, meta } = exposureMap(), ratings = dailyRatings();
   const rows = [...meta.entries()].map(([k, m]) => ({ k, ...m, days: ex.get(k).size, start: startEffect(m, ratings) }));
   const prods = rows.filter(r=>r.type==="p").sort((a,b)=> b.last.localeCompare(a.last) || b.days - a.days);
+  const unused = Object.keys(catalog).filter(k => !meta.has(keyOf("p", catalog[k].name)));
   const facs = rows.filter(r=>r.type==="f").sort((a,b)=> b.days - a.days);
-  if (!prods.length && !facs.length) { el.innerHTML = `<div class="empty">Your usage table builds itself from your memos.</div>`; return; }
   const se = s => s ? `<span style="color:${s.after < s.before - .3 ? "var(--good)" : s.after > s.before + .3 ? "var(--bad)" : "var(--muted)"};font-weight:600">${s.before.toFixed(1)}→${s.after.toFixed(1)}</span>` : `<span class="sub">–</span>`;
+  const inciTag = name => { const c = catalog[catKey(name)]; if (!c) return "";
+    return c.status === "done" ? ` · <span style="color:var(--good)">INCI ✓</span>${c.flags?.length?` · <span style="color:var(--bad)">${c.flags.length} flagged</span>`:""}` : c.status === "looking" ? ` · <span class="spin"></span>` : ""; };
+  // habits
+  const today = ymd(Date.now());
+  const lastChange = k => { for (const e of entries) if (e.bedding?.[k]) return e.date; return null; };
+  const water7 = entries.filter(e => e.water != null && dayDiff(e.date, today) < 7);
+  const habit = BEDDING.map(([k,l]) => { const d = lastChange(k); return `<tr><td>${l}</td><td>${d ? (dayDiff(d, today) === 0 ? "changed today" : `changed ${dayDiff(d, today)} day${dayDiff(d,today)===1?"":"s"} ago`) : `<span class="sub">not logged yet</span>`}</td></tr>`; }).join("")
+    + `<tr><td>Water</td><td>${water7.length ? `${mean(water7.map(e=>e.water)).toFixed(1)} glasses/day <span class="sub">(last 7 days)</span>` : `<span class="sub">not logged yet</span>`}</td></tr>`;
   el.innerHTML = `
     <h2 style="margin-top:4px">Products</h2>
     <div class="card"><div class="tablewrap"><table>
       <tr><th>Product</th><th>Days</th><th>Last</th><th>Since start</th></tr>
-      ${prods.map(r=>`<tr><td>${esc(r.name)}<div class="sub">${esc(r.category||"")} · since ${shortDay(r.first)}</div></td><td>${r.days}</td><td>${shortDay(r.last)}</td><td>${se(r.start)}</td></tr>`).join("") || `<tr><td colspan="4" class="sub">None yet</td></tr>`}
+      ${prods.map(r=>`<tr class="click" data-prod="${esc(catKey(r.name))}"><td>${esc(r.name)}<div class="sub">${esc(r.category||"")} · since ${shortDay(r.first)}${inciTag(r.name)}</div></td><td>${r.days}</td><td>${shortDay(r.last)}</td><td>${se(r.start)}</td></tr>`).join("")}
+      ${unused.map(k=>`<tr class="click" data-prod="${esc(k)}"><td>${esc(catalog[k].name)}<div class="sub">${esc(catalog[k].category||"")} · not logged yet${inciTag(catalog[k].name)}</div></td><td>0</td><td>–</td><td>–</td></tr>`).join("")}
+      ${!prods.length && !unused.length ? `<tr><td colspan="4" class="sub">None yet. Add products from the Log tab.</td></tr>` : ""}
     </table></div>
-    <div class="hint">"Since start" = your average skin rating in the 2 weeks before you first logged it → the 4 weeks after. Lower is better.</div></div>
+    <div class="hint">Tap a product for its ingredients and INCIDecoder page. "Since start" = average skin rating 2 weeks before you first logged it → the 4 weeks after. Lower is better.</div></div>
+    <h2>Habits</h2>
+    <div class="card"><table>${habit}</table></div>
     <h2>Lifestyle factors</h2>
     <div class="card"><div class="tablewrap"><table>
       <tr><th>Factor</th><th>Days</th><th>Last</th></tr>
       ${facs.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.days}</td><td>${shortDay(r.last)}</td></tr>`).join("") || `<tr><td colspan="3" class="sub">None yet</td></tr>`}
     </table></div></div>`;
+  el.querySelectorAll("[data-prod]").forEach(tr => tr.onclick = () => openProductSheet(tr.dataset.prod));
+}
+let sheetProduct = null;
+function openProductSheet(k){
+  if (!catalog[k]) { const m = [...exposureMap().meta.values()].find(m => catKey(m.name) === k); if (!m) return; ensureCatalog(m.name, m.category); saveCatalog(); }
+  sheetMode = "product"; sheetProduct = k; showSheet(); renderProductSheet();
+}
+function renderProductSheet(){
+  const c = catalog[sheetProduct]; if (!c) { closeSheet(); return; }
+  const st = productStats().get(sheetProduct);
+  const link = c.url || incidecoderSearch(c.name);
+  const status = c.status === "done" ? "" : c.status === "looking" ? `<div class="sub"><span class="spin"></span> Looking it up on INCIDecoder…</div>`
+    : c.status === "notfound" ? `<div class="sub">Couldn't find this exact product on INCIDecoder. Open the search, find it, and paste the ingredient list below.</div>`
+    : c.status === "error" ? `<div class="sub">Lookup failed: ${esc(c.error||"error")}</div>` : !settings.apiKey ? `<div class="sub">Add your API key in Settings to look up ingredients automatically.</div>` : `<div class="sub">Lookup queued.</div>`;
+  $("#sheetPanel").innerHTML = `<div class="grab"></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:10px;flex-wrap:nowrap"><h2 style="margin:0">${esc(c.name)}</h2><button class="btn" id="pdClose">Done</button></div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><a href="${esc(link)}" target="_blank" rel="noopener">${c.url ? "Open on INCIDecoder ↗" : "Search INCIDecoder ↗"}</a>
+        ${settings.apiKey ? `<button class="btn small" id="pdLookup">${c.status==="done"?"Look up again":"Look up ingredients"}</button>` : ""}</div>
+      ${c.matchedName && c.matchedName.toLowerCase() !== c.name.toLowerCase() ? `<div class="sub" style="margin-top:6px">Matched: ${esc(c.matchedName)}</div>` : ""}
+      ${status}
+      ${c.actives?.length ? `<div class="subhead">Key actives</div><div class="chips">${c.actives.map(a=>`<span class="chip">${esc(a)}</span>`).join("")}</div>` : ""}
+      ${c.flags?.length ? `<div class="subhead">Flagged ingredients</div><div class="chips">${c.flags.map(a=>`<span class="chip flag">${esc(a)}</span>`).join("")}</div>` : ""}
+      ${c.inci?.length ? `<div class="subhead">Ingredients (INCI) · ${c.inci.length}</div><div class="inci">${c.inci.map(esc).join(", ")}</div>` : ""}
+    </div>
+    <div class="card">
+      <div class="label" style="margin-top:0">Category</div>
+      <select id="pdCat">${CATS.map(x=>`<option${x===c.category?" selected":""}>${x}</option>`).join("")}</select>
+      <div class="label">Ingredient list <span>paste or fix by hand</span></div>
+      <textarea id="pdInci" style="min-height:90px" placeholder="Aqua, Glycerin, Niacinamide…">${esc((c.inci||[]).join(", "))}</textarea>
+      <button class="primary" id="pdSave">Save</button>
+    </div>
+    ${st ? `<div class="sub" style="text-align:center">Used on ${st.days.size} day${st.days.size===1?"":"s"} · last ${esc(fmtDay(st.last))}</div>` : ""}`;
+  $("#pdClose").onclick = closeSheet;
+  const lk = $("#pdLookup"); if (lk) lk.onclick = async () => { c.status = "new"; await saveCatalog(); renderProductSheet(); processQueue(); };
+  $("#pdSave").onclick = async () => {
+    c.category = $("#pdCat").value;
+    const list = $("#pdInci").value.split(/,(?![^(]*\))/).map(x => x.trim()).filter(Boolean).slice(0, 120);
+    if (list.join(",") !== (c.inci||[]).join(",")) { c.inci = list; if (list.length) c.status = "done"; }
+    await saveCatalog(); toast("Saved"); closeSheet(); render();
+  };
 }
 function toCsv(){
   const q = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
-  const out = [["date","time","your_rating","ai_rating","front","left","right","neck","type","name","category","when","day_offset","detail","memo"].join(",")];
+  const out = [["date","time","your_rating","ai_rating","front","left","right","neck","water_glasses","new_pillowcase","new_sheets","new_towel","type","name","category","when","day_offset","applied_to","detail","memo","notes"].join(",")];
   for (const e of entries.slice().reverse()) {
-    const base = [e.date, fmtTime(e.ts), e.rating ?? "", e.ai?.score ?? "", ...AREA_KEYS.map(k => areaScore(e, k).r ?? "")];
-    const items = [...(e.products||[]).map(p=>["product",p.name,p.category,p.time,p.dayOffset||0,p.amount||""]), ...(e.factors||[]).map(f=>["factor",f.name,"","",f.dayOffset||0,f.detail||""])];
-    if (!items.length) items.push(["","","","","",""]);
-    items.forEach((it, i) => out.push([...base, ...it, i===0 ? e.memo||"" : ""].map(q).join(",")));
+    const base = [e.date, fmtTime(e.ts), e.rating ?? "", e.ai?.score ?? "", ...AREA_KEYS.map(k => areaScore(e, k).r ?? ""), e.water ?? "", ...BEDDING.map(([k]) => e.bedding?.[k] ? 1 : "")];
+    const items = [...(e.products||[]).map(p=>["product",p.name,p.category,p.time,p.dayOffset||0,p.area||"all",p.amount||""]), ...(e.factors||[]).map(f=>["factor",f.name,"","",f.dayOffset||0,"",f.detail||""])];
+    if (!items.length) items.push(["","","","","","",""]);
+    items.forEach((it, i) => out.push([...base, ...it, i===0 ? e.memo||"" : "", i===0 ? e.notes||"" : ""].map(q).join(",")));
   }
   return out.join("\n");
 }
@@ -1008,10 +1278,13 @@ async function runAnalysis(){
   askCtl = new AbortController();
   btn.textContent = "Stop"; out.innerHTML = `<div class="sub"><span class="spin"></span> Thinking… this can take up to a minute.</div>`;
   const ratings = dailyRatings(), byDay = new Map();
-  const day = d => { if (!byDay.has(d)) byDay.set(d, { p: new Set(), f: new Set(), skin: [], ai: [] }); return byDay.get(d); };
+  const day = d => { if (!byDay.has(d)) byDay.set(d, { p: new Set(), f: new Set(), skin: [], ai: [], misc: [] }); return byDay.get(d); };
   for (const e of entries.slice().reverse()) {
     const d = day(e.date);
-    for (const p of e.products||[]) day(addDays(e.date, p.dayOffset||0)).p.add(p.name + (p.time!=="other"?` (${p.time})`:""));
+    for (const p of e.products||[]) day(addDays(e.date, p.dayOffset||0)).p.add(p.name + (p.time!=="other"?` (${p.time})`:"") + (p.area && p.area!=="all" ? ` [${p.area} only]` : ""));
+    if (e.water != null) d.misc.push(`water ${e.water} glasses`);
+    for (const [k] of BEDDING) if (e.bedding?.[k]) d.misc.push(`new ${k}`);
+    if (e.notes) d.misc.push(`note: ${e.notes.slice(0,200)}`);
     for (const f of e.factors||[]) day(addDays(e.date, f.dayOffset||0)).f.add(f.name + (f.detail?` [${f.detail}]`:""));
     if (e.skin) d.skin.push(e.skin);
     if (e.ai?.regions?.length) d.ai.push(e.ai.regions.join("/"));
@@ -1019,7 +1292,7 @@ async function runAnalysis(){
   const areaDaily = Object.fromEntries(AREA_KEYS.map(k => [k, dailyRatings(k)]));
   const lines = [...byDay.keys()].sort().slice(-150).map(d => { const v = byDay.get(d), r = ratings.get(d);
     const ar = AREA_KEYS.map(k => areaDaily[k].has(d) ? `${k} ${areaDaily[k].get(d).toFixed(1)}` : null).filter(Boolean).join(", ");
-    return `${d} | rating ${r!=null?r.toFixed(1):"-"}${ar?` (${ar})`:""} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.skin.length?` | notes: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
+    return `${d} | rating ${r!=null?r.toFixed(1):"-"}${ar?` (${ar})`:""} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.misc.length?` | ${v.misc.join("; ")}`:""}${v.skin.length?` | skin: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
   const { meta } = exposureMap();
   const starts = [...meta.values()].filter(m=>m.type==="p").map(m=>{ const s = startEffect(m, ratings); return `${m.name}: first ${m.first}${s?`, avg ${s.before.toFixed(1)} (2wk before) → ${s.after.toFixed(1)} (4wk after)`:""}`; });
   const effs = computeEffects(LAGS[1]).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)).slice(0,15).map(x=>`${x.name}: ${x.delta>0?"+":""}${x.delta.toFixed(2)} (n=${x.nYes} vs ${x.nNo}, z=${x.z.toFixed(1)})`);
@@ -1028,6 +1301,11 @@ async function runAnalysis(){
 Daily log (oldest first):
 ${lines.join("\n")}
 
+Ingredients of their products (from INCIDecoder; look for ingredients shared by products that preceded breakouts):
+${Object.values(catalog).filter(c => c.inci?.length).slice(0, 40).map(c => `${c.name}: ${c.inci.slice(0, 30).join(", ")}${c.flags?.length ? ` [flagged: ${c.flags.join(", ")}]` : ""}`).join("\n") || "-"}
+
+Derived factors: "pillowcase 4+ days old", "sheets 8+ days old", "face towel 3+ days old" (based on logged bedding changes) and "low water (<5 glasses)".
+
 Product start dates and before/after averages:
 ${starts.join("\n") || "-"}
 
@@ -1035,10 +1313,10 @@ Precomputed: difference in average rating 1-3 days after each item vs days witho
 ${effs.join("\n") || "-"}
 
 Write a concise, specific analysis in Markdown (under 350 words) with these "#### " headings:
-#### Likely triggers - strongest candidates, the evidence from the log, and how confident you are
+#### Likely triggers - strongest candidates (products, specific ingredients, diet, habits), the evidence from the log, and how confident you are
 #### What seems to help
 #### New products to watch - say when worsening after starting a product could be purging (retinoids, acids; usually settles within ~4-6 weeks) vs a true reaction
-#### Next experiment - one concrete single-variable test (e.g. cut X for 2 weeks while keeping everything else the same)
+#### Next experiment - one concrete test. For a topical, prefer a split-face test (product on one side only, swap sides after 3-4 weeks); for diet/habits, an on/off block of 2-3 weeks
 #### Gaps in the data - what to log more consistently
 Be honest about small samples and confounders (things that happen together, the menstrual cycle). Don't invent data. If acne looks severe, scarring, or cystic, suggest a dermatologist in one line.`;
   try {
@@ -1076,9 +1354,9 @@ function trendChart(ratings){
   if (roll.length > 1) s += `<path d="${roll.map(([d,v],i)=>`${i?"L":"M"}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".75"/>`;
   for (const d of pts) { const r = ratings.get(d); s += `<circle cx="${x(d).toFixed(1)}" cy="${y(r).toFixed(1)}" r="3.4" fill="${rateColor(r)}"/>`; }
   if (overlayKey) {
-    const set = exposureMap().ex.get(overlayKey) || new Set(), yy = H - 18;
+    const set = exposureMap().ex.get(overlayKey) || new Map(), yy = H - 18;
     s += `<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2 3"/>`;
-    for (const d of set) if (d >= start && d <= today) s += `<rect x="${(x(d)-2).toFixed(1)}" y="${yy-5}" width="4" height="10" rx="1.5" fill="var(--accent)"/>`;
+    for (const d of set.keys()) if (d >= start && d <= today) s += `<rect x="${(x(d)-2).toFixed(1)}" y="${yy-5}" width="4" height="10" rx="1.5" fill="var(--accent)"/>`;
   }
   s += `<text x="${L}" y="${H-3}" font-size="10" fill="var(--muted)">${shortDay(start)}</text><text x="${W-R}" y="${H-3}" font-size="10" text-anchor="end" fill="var(--muted)">Today</text></svg>`;
   s += `<div class="legend"><span><i style="background:var(--ink);opacity:.75"></i>7-day average</span><span><i style="background:${rateColor(3)}"></i>daily rating</span>${overlayKey?`<span><i style="background:var(--accent)"></i>days used</span>`:""}</div>`;
