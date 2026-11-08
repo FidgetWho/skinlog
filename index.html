@@ -160,6 +160,13 @@ nav button.on{color:var(--accent);font-weight:600}
 .stepper button{width:38px;height:38px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-size:20px;font-weight:600}
 .stepper b{min-width:30px;text-align:center;font-size:17px}
 .subhead{font-size:12px;color:var(--muted);margin:12px 0 2px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.bubble{border-radius:16px;padding:10px 13px;margin-bottom:10px;max-width:92%;font-size:14.5px}
+.bubble.me{background:var(--ink);color:var(--bg);margin-left:auto;width:fit-content;white-space:pre-wrap}
+.bubble.ai{background:var(--card);border:1px solid var(--line)}
+.bubble.ai p:last-child,.bubble.ai ul:last-child{margin-bottom:0}
+.chatbar{display:flex;gap:8px;align-items:flex-end;margin-top:12px}
+.chatbar textarea{min-height:46px;max-height:140px;resize:none;border-radius:14px}
+.chatbar button{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#fff;font-size:20px;font-weight:700;flex:none}
 .chip.flag{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
 .inci{font-size:13px;color:var(--muted);line-height:1.6}
 a{color:var(--accent)}
@@ -240,11 +247,13 @@ tr.click{cursor:pointer}
 </section>
 <section id="v-products" class="hidden"><div id="prodBody"></div></section>
 <section id="v-insights" class="hidden"><div id="insBody"></div></section>
+<section id="v-ask" class="hidden"><div id="askBody"></div></section>
 
 <nav id="nav">
   <button data-v="log" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg>Log</button>
   <button data-v="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 15l4-4 4 4 3-3 5 5"/></svg>History</button>
   <button data-v="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4H9zM8 7h8l1 3v10a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V10z"/></svg>Products</button>
+  <button data-v="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.3 2.4c-.5.2-.8.6-.8 1.1v.5M12 16.5h.01"/></svg>Ask</button>
   <button data-v="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
 </nav>
 
@@ -373,7 +382,7 @@ async function boot(){
   renderAreaTabs(); renderCapShots();
   try { const s = await store.get("settings"); if (s) settings = { ...settings, ...s }; } catch {}
   if (settings.liveCam) startCamera(); else showSysCam();
-  try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; catalog = await store.get("catalog") || {}; syncCatalog(); }
+  try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; catalog = await store.get("catalog") || {}; syncCatalog(); profile = await store.get("profile") || {}; chat = await store.get("chat") || []; }
   catch { $("#banner").innerHTML = `<div class="banner">This browser blocked local storage, so entries can't be saved. Open the app from your home screen icon.</div>`; }
   updateGhost();
   renderBanner();
@@ -405,7 +414,7 @@ $("#nav").addEventListener("click", e => { const b = e.target.closest("button[da
 function setView(v){
   view = v;
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
-  ["log","history","products","insights"].forEach(n=>$("#v-"+n).classList.toggle("hidden", n!==v));
+  ["log","history","products","insights","ask"].forEach(n=>$("#v-"+n).classList.toggle("hidden", n!==v));
   if (v === "log" && $("#draft").classList.contains("hidden") && settings.liveCam) startCamera(); else stopCamera();
   window.scrollTo(0,0); render();
 }
@@ -415,6 +424,7 @@ function render(){
   else if (view==="history") renderHistory();
   else if (view==="products") renderProducts();
   else if (view==="insights") renderInsights();
+  else if (view==="ask" && !chatCtl) renderAsk();
   if (sheetMode === "entry" && sheetEntryId) renderSheet();
   if (sheetMode === "product" && sheetProduct) renderProductSheet();
 }
@@ -1047,7 +1057,7 @@ async function renderSettings(){
   $("#stCsv").onclick = async () => { try { await navigator.clipboard.writeText(toCsv()); toast("Copied. Paste into Sheets or Excel."); } catch { toast("Couldn't copy"); } };
   $("#stWipe").onclick = async () => {
     if (!wipeArm) { wipeArm = true; renderSettings(); return; }
-    await store.clearAll(); const key = settings.apiKey; entries = []; analysis = null; catalog = {}; lastSavedId = null;
+    await store.clearAll(); const key = settings.apiKey; entries = []; analysis = null; catalog = {}; profile = {}; chat = []; lastSavedId = null;
     settings.apiKey = key; await saveSettings(); photoURLs.forEach(u=>URL.revokeObjectURL(u)); photoURLs.clear();
     wipeArm = false; closeSheet(); updateGhost(); render(); toast("Erased");
   };
@@ -1056,7 +1066,7 @@ async function exportBackup(){
   toast("Preparing backup…", 8000);
   const photos = {};
   for (const e of entries) for (const p of photosOf(e)) { const b = await store.getPhoto(p.id).catch(()=>null); if (b) photos[p.id] = await blobToB64(b); }
-  const json = JSON.stringify({ app: "skinlog", version: 2, exported: Date.now(), entries, analysis, catalog, photos });
+  const json = JSON.stringify({ app: "skinlog", version: 2, exported: Date.now(), entries, analysis, catalog, profile, photos });
   const file = new File([json], `skinlog-backup-${ymd(Date.now())}.json`, { type: "application/json" });
   try {
     if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: "Skin Log backup" }); toast("Backup ready"); return; }
@@ -1078,6 +1088,7 @@ $("#importFile").addEventListener("change", async ev => {
     if (data.analysis && !analysis) { analysis = data.analysis; await store.set("analysis", analysis); }
     for (const [k, c] of Object.entries(data.catalog || {})) if (!catalog[k] || (c.status === "done" && catalog[k].status !== "done")) catalog[k] = c;
     syncCatalog(); await saveCatalog();
+    if (data.profile && !Object.values(profile).some(v => normName(v))) { profile = data.profile; await store.set("profile", profile); }
     sortEntries(); updateGhost(); render(); if (sheetMode === "settings") renderSettings(); toast(`Imported ${n} new entr${n===1?"y":"ies"}`);
   } catch { toast("That doesn't look like a Skin Log backup"); }
 });
@@ -1272,11 +1283,7 @@ function renderInsights(){
   $("#insAreaSeg").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; settings.insArea = b.dataset.a; saveSettings(); renderInsights(); };
 }
 let askCtl = null;
-async function runAnalysis(){
-  const btn = $("#askBtn"), out = $("#askOut");
-  if (askCtl) { askCtl.abort(); return; }
-  askCtl = new AbortController();
-  btn.textContent = "Stop"; out.innerHTML = `<div class="sub"><span class="spin"></span> Thinking… this can take up to a minute.</div>`;
+function buildLogContext(maxDays = 150){
   const ratings = dailyRatings(), byDay = new Map();
   const day = d => { if (!byDay.has(d)) byDay.set(d, { p: new Set(), f: new Set(), skin: [], ai: [], misc: [] }); return byDay.get(d); };
   for (const e of entries.slice().reverse()) {
@@ -1290,27 +1297,41 @@ async function runAnalysis(){
     if (e.ai?.regions?.length) d.ai.push(e.ai.regions.join("/"));
   }
   const areaDaily = Object.fromEntries(AREA_KEYS.map(k => [k, dailyRatings(k)]));
-  const lines = [...byDay.keys()].sort().slice(-150).map(d => { const v = byDay.get(d), r = ratings.get(d);
+  const lines = [...byDay.keys()].sort().slice(-maxDays).map(d => { const v = byDay.get(d), r = ratings.get(d);
     const ar = AREA_KEYS.map(k => areaDaily[k].has(d) ? `${k} ${areaDaily[k].get(d).toFixed(1)}` : null).filter(Boolean).join(", ");
     return `${d} | rating ${r!=null?r.toFixed(1):"-"}${ar?` (${ar})`:""} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.misc.length?` | ${v.misc.join("; ")}`:""}${v.skin.length?` | skin: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
   const { meta } = exposureMap();
   const starts = [...meta.values()].filter(m=>m.type==="p").map(m=>{ const s = startEffect(m, ratings); return `${m.name}: first ${m.first}${s?`, avg ${s.before.toFixed(1)} (2wk before) → ${s.after.toFixed(1)} (4wk after)`:""}`; });
   const effs = computeEffects(LAGS[1]).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)).slice(0,15).map(x=>`${x.name}: ${x.delta>0?"+":""}${x.delta.toFixed(2)} (n=${x.nYes} vs ${x.nNo}, z=${x.z.toFixed(1)})`);
-  const prompt = `You're helping someone understand their own acne from a personal log they keep. Ratings are 0 (clear) to 10 (worst), self-rated (or AI-estimated from a photo on days they didn't rate). The overall rating is the average of sections they rated; section ratings (front of face, left side, right side, neck) are in parentheses. Note when a trigger seems to affect one section (e.g. jawline/neck, or one side, which can point to phone, pillow or sleeping side) more than others.
+  return `Today is ${ymd(Date.now())}.
+Their log: ratings are 0 (clear) to 10 (worst), self-rated (or AI-estimated from a photo on days they didn't rate). The overall rating is the average of sections they rated; section ratings (front of face, left side, right side, neck) are in parentheses. "[left only]" means a product was applied to one side only (split-face).
 
 Daily log (oldest first):
-${lines.join("\n")}
+${lines.join("\n") || "(nothing logged yet)"}
 
-Ingredients of their products (from INCIDecoder; look for ingredients shared by products that preceded breakouts):
+Ingredients of their products (from INCIDecoder):
 ${Object.values(catalog).filter(c => c.inci?.length).slice(0, 40).map(c => `${c.name}: ${c.inci.slice(0, 30).join(", ")}${c.flags?.length ? ` [flagged: ${c.flags.join(", ")}]` : ""}`).join("\n") || "-"}
 
-Derived factors: "pillowcase 4+ days old", "sheets 8+ days old", "face towel 3+ days old" (based on logged bedding changes) and "low water (<5 glasses)".
+Derived factors: "pillowcase 4+ days old", "sheets 8+ days old", "face towel 3+ days old" (from logged bedding changes) and "low water (<5 glasses)".
 
 Product start dates and before/after averages:
 ${starts.join("\n") || "-"}
 
 Precomputed: difference in average rating 1-3 days after each item vs days without it (positive = worse):
-${effs.join("\n") || "-"}
+${effs.join("\n") || "-"}`;
+}
+function profileText(){
+  const p = profile || {}, rows = PROFILE_FIELDS.filter(([k]) => normName(p[k])).map(([k, l]) => `${l}: ${normName(p[k])}`);
+  return rows.length ? `About them (background they wrote):\n${rows.join("\n")}\n\n` : "";
+}
+async function runAnalysis(){
+  const btn = $("#askBtn"), out = $("#askOut");
+  if (askCtl) { askCtl.abort(); return; }
+  askCtl = new AbortController();
+  btn.textContent = "Stop"; out.innerHTML = `<div class="sub"><span class="spin"></span> Thinking… this can take up to a minute.</div>`;
+  const prompt = `You're helping someone understand their own acne from a personal log they keep. Note when a trigger seems to affect one section (e.g. jawline/neck, or one side, which can point to phone, pillow or sleeping side) more than others, and look for ingredients shared by products that preceded breakouts.
+
+${profileText()}${buildLogContext()}
 
 Write a concise, specific analysis in Markdown (under 350 words) with these "#### " headings:
 #### Likely triggers - strongest candidates (products, specific ingredients, diet, habits), the evidence from the log, and how confident you are
@@ -1318,13 +1339,118 @@ Write a concise, specific analysis in Markdown (under 350 words) with these "###
 #### New products to watch - say when worsening after starting a product could be purging (retinoids, acids; usually settles within ~4-6 weeks) vs a true reaction
 #### Next experiment - one concrete test. For a topical, prefer a split-face test (product on one side only, swap sides after 3-4 weeks); for diet/habits, an on/off block of 2-3 weeks
 #### Gaps in the data - what to log more consistently
-Be honest about small samples and confounders (things that happen together, the menstrual cycle). Don't invent data. If acne looks severe, scarring, or cystic, suggest a dermatologist in one line.`;
+Use their background where relevant. Be honest about small samples and confounders (things that happen together, the menstrual cycle). Don't invent data. If acne looks severe, scarring, or cystic, suggest a dermatologist in one line.`;
   try {
     const text = await claude(prompt, { model: settings.analysisModel, max_tokens: 2000, signal: askCtl.signal });
     analysis = { text, ts: Date.now(), n: entries.length }; await store.set("analysis", analysis).catch(()=>{});
     out.innerHTML = md(text);
   } catch (e) { out.innerHTML = e.code === "cancelled" ? "" : `<div class="sub">${esc(errText(e))}</div>`; }
   finally { askCtl = null; const b = $("#askBtn"); if (b) b.textContent = "Re-analyze my log"; }
+}
+
+/* ================= Ask tab: background + chat ================= */
+const PROFILE_FIELDS = [
+  ["basics", "Basics", "Age, sex, skin type (oily / dry / combination / sensitive), skin tone if relevant", 1],
+  ["history", "Acne history", "When it started, where it shows up, cystic or not, scarring, patterns with your cycle, what a dermatologist has said", 3],
+  ["meds", "Medications & supplements", "Current and past: e.g. tretinoin since March, spironolactone 50mg, birth control, Accutane in 2022, zinc…", 3],
+  ["worked", "What's worked / what hasn't", "e.g. benzoyl peroxide helped but dried me out; coconut oil broke me out", 3],
+  ["sensitive", "Allergies & sensitivities", "Fragrance, specific ingredients, irritation…", 2],
+  ["life", "Lifestyle & environment", "Diet, exercise, job (masks, helmets, heat), climate, shaving, sleep, stress…", 2],
+  ["goals", "Goals & questions", "What you most want to figure out or fix", 2],
+];
+let profile = {}, chat = [], chatCtl = null, bgEditing = false;
+const SUGGESTED = ["What's most likely causing my breakouts?", "Is this purging or a reaction?", "Do any of my products share a pore-clogging ingredient?", "What should I test next?", "Summarize my last 2 weeks"];
+function renderAsk(){
+  const el = $("#askBody");
+  const filled = PROFILE_FIELDS.filter(([k]) => normName(profile[k]));
+  let h = `<div class="card">`;
+  if (bgEditing || !filled.length) {
+    h += `<div class="row" style="justify-content:space-between;margin-bottom:4px"><h3 style="margin:0">Your background</h3>${filled.length?`<button class="btn small" id="bgDone">Done</button>`:""}</div>
+      <div class="sub" style="margin-bottom:6px">Claude reads this every time you ask a question or analyze your log. Fill in what you like, and tap the keyboard 🎙 to dictate.</div>
+      ${PROFILE_FIELDS.map(([k,l,ph,rows]) => `<div class="label">${esc(l)}</div><textarea data-pf="${k}" style="min-height:${rows*24+20}px" placeholder="${esc(ph)}">${esc(profile[k]||"")}</textarea>`).join("")}
+      <button class="primary" id="bgSave">Save background</button>`;
+  } else {
+    h += `<div class="row" style="justify-content:space-between"><h3 style="margin:0">Your background</h3><button class="btn small" id="bgEdit">Edit</button></div>
+      <div class="sub" style="margin-top:6px">${filled.map(([k,l]) => `<b style="color:var(--ink)">${esc(l)}:</b> ${esc(normName(profile[k]).slice(0,140))}${normName(profile[k]).length>140?"…":""}`).join("<br>")}</div>`;
+  }
+  h += `</div>`;
+  h += `<div class="row" style="justify-content:space-between;margin:18px 0 8px"><h2 style="margin:0">Ask Claude</h2>${chat.length?`<button class="btn small" id="chatClear">New chat</button>`:""}</div>`;
+  h += `<div id="chatLog">${chat.map(m => m.role === "user" ? `<div class="bubble me">${esc(m.content)}</div>` : `<div class="bubble ai md">${md(m.content)}</div>`).join("")}</div>`;
+  if (!chat.length) h += `<div class="sub" style="margin-bottom:8px">Claude can see your whole log, ingredients and stats (not photos). Try:</div><div class="chips" id="suggest">${SUGGESTED.map(q=>`<button class="chip pick" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>`;
+  h += `<div class="chatbar"><textarea id="askInput" rows="1" placeholder="Ask about your skin…"></textarea><button id="askSend" aria-label="Send">${chatCtl?"■":"↑"}</button></div>`;
+  if (!settings.apiKey) h += `<div class="hint">Add your API key in <button data-settings style="text-decoration:underline;color:inherit">Settings</button> to ask questions.</div>`;
+  const draftQ = $("#askInput")?.value || "";
+  el.innerHTML = h;
+  $("#askInput").value = draftQ;
+  el.querySelectorAll("[data-pf]").forEach(t => t.oninput = () => { profile[t.dataset.pf] = t.value; });
+  const save = async () => { await store.set("profile", profile).catch(()=>{}); bgEditing = false; toast("Saved"); renderAsk(); };
+  if ($("#bgSave")) $("#bgSave").onclick = save;
+  if ($("#bgDone")) $("#bgDone").onclick = save;
+  if ($("#bgEdit")) $("#bgEdit").onclick = () => { bgEditing = true; renderAsk(); };
+  if ($("#chatClear")) $("#chatClear").onclick = async () => { if (chatCtl) chatCtl.abort(); chat = []; await store.set("chat", chat).catch(()=>{}); renderAsk(); };
+  if ($("#suggest")) $("#suggest").onclick = e => { const b = e.target.closest("[data-q]"); if (b) sendChat(b.dataset.q); };
+  const inp = $("#askInput");
+  inp.oninput = () => { inp.style.height = "auto"; inp.style.height = Math.min(140, inp.scrollHeight) + "px"; };
+  $("#askSend").onclick = () => { if (chatCtl) { chatCtl.abort(); return; } sendChat(inp.value); };
+}
+async function sendChat(q){
+  q = normName(q); if (!q || chatCtl) return;
+  if (!settings.apiKey) { toast("Add your API key in Settings"); return; }
+  chat.push({ role: "user", content: q, ts: Date.now() });
+  $("#askInput").value = "";
+  chatCtl = new AbortController();
+  renderAsk();
+  const log = $("#chatLog");
+  const bubble = document.createElement("div"); bubble.className = "bubble ai md"; bubble.innerHTML = `<span class="spin"></span>`;
+  log.appendChild(bubble); bubble.scrollIntoView({ block: "end", behavior: "smooth" });
+  const system = `You are a knowledgeable, careful skincare assistant inside the person's private acne-tracking app. Answer their questions using their background and log below: cite specific dates, products, ingredients and numbers from it when relevant, and say plainly when the data is too thin to tell. You're not a doctor: for prescription decisions, severe/cystic/scarring acne, or anything that sounds like infection or allergy, say to check with a dermatologist (briefly, once). Be concise and phone-friendly: short paragraphs or bullets, usually under 200 words unless they ask for more. Use Markdown sparingly.
+
+${profileText()}${buildLogContext(120)}`;
+  const turns = chat.slice(-20).map(m => ({ role: m.role, content: m.content }));
+  let text = "";
+  try {
+    text = await claudeStream(turns, { system, model: settings.analysisModel, max_tokens: 1500, signal: chatCtl.signal,
+      onText: t => { text = t; bubble.innerHTML = md(t); } });
+    chat.push({ role: "assistant", content: text, ts: Date.now() });
+  } catch (e) {
+    if (text) chat.push({ role: "assistant", content: text + (e.code === "cancelled" ? "\n\n*(stopped)*" : "\n\n*(interrupted)*"), ts: Date.now() });
+    else { chat.pop(); if (e.code !== "cancelled") toast(errText(e)); $("#askInput") && ($("#askInput").value = q); }
+  } finally {
+    chatCtl = null;
+    chat = chat.slice(-60); await store.set("chat", chat).catch(()=>{});
+    const keep = $("#askInput")?.value || ""; renderAsk(); if (keep) $("#askInput").value = keep;
+    const last = $("#chatLog")?.lastElementChild; if (last) last.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
+}
+async function claudeStream(messages, { system, model, max_tokens = 1500, signal, onText }){
+  if (!settings.apiKey) throw { code: "no_key" };
+  if (!navigator.onLine) throw { code: "offline" };
+  let r;
+  try {
+    r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", signal,
+      headers: { "content-type": "application/json", "x-api-key": settings.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model, max_tokens, system, messages, stream: true }) });
+  } catch (e) { if (e.name === "AbortError") throw { code: "cancelled" }; throw { code: "network" }; }
+  if (!r.ok) { let m = ""; try { m = (await r.json()).error?.message || ""; } catch {}
+    throw { code: r.status === 401 ? "bad_key" : r.status === 429 ? "rate_limited" : r.status === 529 ? "overloaded" : "http_" + r.status, message: m }; }
+  const reader = r.body.getReader(), dec = new TextDecoder();
+  let buf = "", text = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith("data:")) continue;
+        let ev; try { ev = JSON.parse(line.slice(5)); } catch { continue; }
+        if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { text += ev.delta.text; onText?.(text); }
+        else if (ev.type === "error") throw { code: ev.error?.type === "overloaded_error" ? "overloaded" : "upstream", message: ev.error?.message };
+      }
+    }
+  } catch (e) { if (e?.name === "AbortError") throw { code: "cancelled" }; throw e; }
+  if (!text) throw { code: "empty", message: "No answer" };
+  return text;
 }
 function md(src){
   const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g, "$1<i>$2</i>");

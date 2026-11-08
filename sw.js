@@ -1,5 +1,5 @@
 // Cache-first app shell: the app opens from the phone's cache, even offline.
-const VERSION = "skinlog-v3";
+const VERSION = "skinlog-v4";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
