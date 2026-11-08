@@ -1,0 +1,13 @@
+{
+  "name": "Skin Log",
+  "short_name": "Skin Log",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f0ea",
+  "theme_color": "#f5f0ea",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

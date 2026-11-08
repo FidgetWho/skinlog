@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Skin Log">
+<meta name="theme-color" content="#f5f0ea">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Skin Log</title>
+<style>
+:root{
+  --bg:#f5f0ea; --card:#fffdfa; --ink:#2a231f; --muted:#7b6f67; --line:#e7ddd3;
+  --accent:#b8553a; --accent-ink:#fff; --soft:#f0e6dc; --good:#3f8a5f; --bad:#c0463a; --chip:#efe5db; --fchip:#e5ecf3; --fink:#36536e;
+  --shadow:0 1px 2px rgba(60,40,20,.06),0 4px 14px rgba(60,40,20,.06);
+  --serif:ui-serif,"New York",Georgia,serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#1b1715;--card:#25201d;--ink:#f1e9e2;--muted:#a59a91;--line:#3a322d;--soft:#2f2824;--chip:#352d28;--fchip:#26313c;--fink:#a9c3dc;--accent:#d56d4f;--good:#62b585;--bad:#e2685b;--shadow:none}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}
+body{padding:calc(env(safe-area-inset-top) + 10px) 14px calc(env(safe-area-inset-bottom) + 84px);overscroll-behavior-y:none}
+h1,h2,h3{font-family:var(--serif);font-weight:600;margin:0}
+h1{font-size:25px;letter-spacing:-.01em}
+h2{font-size:19px;margin:22px 0 10px}
+h3{font-size:16px;margin:14px 0 6px}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.gear{width:36px;height:36px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.gear svg{width:22px;height:22px}
+.sub{color:var(--muted);font-size:13px}
+.card{background:var(--card);border-radius:18px;padding:16px;box-shadow:var(--shadow);border:1px solid var(--line);margin-bottom:12px}
+.hidden{display:none!important}
+/* camera */
+.cam{position:relative;border-radius:22px;overflow:hidden;background:#111;aspect-ratio:3/4;max-height:62vh;width:100%;margin:0 auto}
+.cam video,.cam .ghost{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cam.mirror video,.cam.mirror .ghost{transform:scaleX(-1)}
+.cam .ghost{opacity:0;pointer-events:none;transition:opacity .2s}
+.cam .ghost.on{opacity:.32}
+.cam .controls{position:absolute;left:0;right:0;bottom:14px;display:flex;align-items:center;justify-content:space-around}
+.shutter{width:72px;height:72px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.45);background-clip:padding-box;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.shutter:active{transform:scale(.94)}
+.camBtn{width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+.camBtn svg{width:22px;height:22px}
+.camBtn.on{background:rgba(255,255,255,.85);color:#111}
+.cam .msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#ddd;text-align:center;padding:24px;gap:12px;font-size:14px}
+.big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:200px;border-radius:22px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:18px;box-shadow:var(--shadow);cursor:pointer;user-select:none}
+.big svg{width:46px;height:46px}
+.alt{display:flex;justify-content:center;gap:18px;margin:12px 0 4px;color:var(--muted);font-size:14px;flex-wrap:wrap}
+.alt label,.alt button{text-decoration:underline;text-underline-offset:3px;cursor:pointer;color:var(--muted)}
+.preview{position:relative;border-radius:16px;overflow:hidden;background:var(--soft)}
+.preview img{display:block;width:100%;max-height:300px;object-fit:cover}
+.preview .x{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);color:#fff;border-radius:99px;padding:5px 11px;font-size:13px}
+.ai{font-size:13px;color:var(--muted);margin:10px 0 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ai b{color:var(--ink)}
+.label{font-size:13px;font-weight:600;margin:16px 0 8px;display:flex;justify-content:space-between}
+.label span{font-weight:400;color:var(--muted)}
+.rates{display:grid;grid-template-columns:repeat(11,1fr);gap:4px}
+.rates button{height:40px;border-radius:10px;background:var(--soft);font-weight:600;font-size:14px;border:2px solid transparent}
+.rates button.on{border-color:var(--ink);color:#fff}
+textarea,input,select{font:inherit;color:inherit;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;width:100%;font-size:16px}
+textarea{min-height:110px;resize:vertical}
+.mic{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;border-radius:14px;background:var(--soft);border:1px solid var(--line);font-weight:600;margin-bottom:8px}
+.mic svg{width:20px;height:20px}
+.mic.rec{background:var(--bad);color:#fff;border-color:var(--bad)}
+.mic.rec .dot{width:9px;height:9px;border-radius:50%;background:#fff;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+.primary{width:100%;margin-top:14px;padding:15px;border-radius:14px;background:var(--ink);color:var(--bg);font-weight:600;font-size:16px}
+.primary:disabled{opacity:.5}
+.btn{padding:8px 13px;border-radius:10px;background:var(--soft);font-size:14px;font-weight:500;border:1px solid var(--line)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:5px 10px;font-size:13px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.chip{background:var(--chip);border-radius:99px;padding:3px 9px;font-size:12.5px}
+.chip.f{background:var(--fchip);color:var(--fink)}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:30px;padding:0 7px;border-radius:9px;font-weight:600;color:#fff;font-size:14px}
+.badge.ai{opacity:.8;border:1.5px dashed rgba(255,255,255,.85)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+.tablewrap{overflow-x:auto;margin:0 -4px}
+.entry{display:flex;gap:12px;cursor:pointer}
+.thumb{width:64px;height:64px;border-radius:12px;object-fit:cover;background:var(--soft);flex:none;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:22px}
+.entry .meta{flex:1;min-width:0}
+.entry .memo{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.daylabel{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:16px 2px 8px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid .g{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;background:var(--soft);cursor:pointer}
+.grid img{width:100%;height:100%;object-fit:cover}
+.grid .g .badge{position:absolute;left:6px;bottom:6px;min-width:24px;height:24px;font-size:12px}
+.grid .g .d{position:absolute;right:6px;bottom:6px;font-size:11px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+.seg{display:flex;background:var(--soft);border-radius:12px;padding:3px;gap:2px;margin-bottom:10px}
+.seg button{flex:1;padding:7px 4px;border-radius:9px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:var(--shadow)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 6px calc(env(safe-area-inset-bottom) + 4px);z-index:20}
+nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--muted);padding:6px 0}
+nav button svg{width:22px;height:22px}
+nav button.on{color:var(--accent);font-weight:600}
+.sheet{position:fixed;inset:0;background:rgba(20,12,8,.45);z-index:40;display:flex;align-items:flex-end}
+.sheet .panel{background:var(--bg);width:100%;max-height:92vh;overflow-y:auto;border-radius:22px 22px 0 0;padding:16px 14px calc(env(safe-area-inset-bottom) + 24px)}
+.sheet .grab{width:40px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 12px}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 86px);transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw;text-align:center}
+.banner{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13.5px;margin-bottom:12px}
+.banner button{color:var(--accent);font-weight:600;text-decoration:underline}
+.eff{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.eff:last-child{border-bottom:0}
+.eff .n{flex:1;min-width:0}
+.eff .n small{display:block;color:var(--muted);font-size:12px}
+.bar{width:100px;height:10px;position:relative;background:var(--soft);border-radius:5px;flex:none}
+.bar i{position:absolute;top:0;bottom:0;border-radius:5px}
+.bar:after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--muted)}
+.delta{width:44px;text-align:right;font-weight:600;font-variant-numeric:tabular-nums;flex:none}
+.md p{margin:0 0 10px}.md ul{margin:0 0 10px;padding-left:20px}.md li{margin:3px 0}.md h4{font-family:var(--serif);font-size:15.5px;margin:14px 0 6px}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:s .8s linear infinite;vertical-align:-1px}
+@keyframes s{to{transform:rotate(360deg)}}
+.empty{text-align:center;color:var(--muted);padding:30px 10px}
+.edit-row{display:grid;grid-template-columns:1fr 104px 32px;gap:6px;margin-bottom:6px}
+.edit-row .wide{grid-column:1/-1}
+.edit-row input,.edit-row select{padding:7px 8px;border-radius:9px}
+.edit-row .rm{color:var(--bad);font-size:20px}
+.chart{width:100%;height:auto;display:block}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:4px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+.toggle:last-child{border-bottom:0}
+.toggle input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Skin Log</h1>
+  <button class="gear" id="openSettings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+</div>
+<div id="banner"></div>
+
+<!-- LOG -->
+<section id="v-log">
+  <div id="capture">
+    <div class="cam mirror" id="cam">
+      <video id="video" playsinline autoplay muted></video>
+      <img class="ghost" id="ghost" alt="">
+      <div class="msg" id="camMsg">
+        <div>Starting camera…</div>
+      </div>
+      <div class="controls" id="camControls">
+        <button class="camBtn" id="ghostBtn" title="Line up with your last photo">Align</button>
+        <button class="shutter" id="shutter" aria-label="Take photo"></button>
+        <button class="camBtn" id="flipBtn" aria-label="Switch camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg></button>
+      </div>
+    </div>
+    <label class="big hidden" id="sysCamBig" for="sysCam">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.8"/></svg>
+      Take today's photo
+    </label>
+    <input id="sysCam" type="file" accept="image/*" capture="user" class="hidden">
+    <input id="lib" type="file" accept="image/*" class="hidden">
+    <div class="alt"><label for="lib">Library</label><label for="sysCam">System camera</label><button id="nophoto">No photo</button></div>
+  </div>
+
+  <div id="draft" class="card hidden">
+    <div id="previewWrap" class="preview hidden"><img id="preview" alt=""><button class="x" id="retake">Retake</button></div>
+
+    <div class="label">How's your skin? <span>0 clear · 10 worst</span></div>
+    <div class="rates" id="rates"></div>
+
+    <div class="label">What did you do? <span>products, food, sleep…</span></div>
+    <button class="mic hidden" id="micBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>Tap to talk</span></button>
+    <textarea id="memo" placeholder="e.g. Washed with CeraVe foaming cleanser, pea of tretinoin, then Vanicream. Slept about 5 hours, had pizza and ice cream last night, picked at my chin."></textarea>
+    <div class="hint" id="memoHint">Talk or type. Haiku turns it into a usage table after you save.</div>
+
+    <button class="primary" id="save">Save entry</button>
+    <div class="alt"><button id="cancel">Cancel</button></div>
+  </div>
+
+  <div id="lastSaved"></div>
+</section>
+
+<section id="v-history" class="hidden">
+  <div class="seg" id="histSeg"><button data-m="list" class="on">Entries</button><button data-m="photos">Photo timeline</button></div>
+  <div id="histBody"></div>
+</section>
+<section id="v-products" class="hidden"><div id="prodBody"></div></section>
+<section id="v-insights" class="hidden"><div id="insBody"></div></section>
+
+<nav id="nav">
+  <button data-v="log" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/></svg>Log</button>
+  <button data-v="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4 15l4-4 4 4 3-3 5 5"/></svg>History</button>
+  <button data-v="products"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6v4H9zM8 7h8l1 3v10a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V10z"/></svg>Products</button>
+  <button data-v="insights"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Insights</button>
+</nav>
+
+<div id="sheet" class="sheet hidden"><div class="panel" id="sheetPanel"></div></div>
+<div id="toast" class="toast hidden"></div>
+<input id="importFile" type="file" accept="application/json,.json" class="hidden">
+
+<script>
+"use strict";
+/* ================= helpers ================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2, "0");
+const ymd = t => { const d = new Date(t); return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()); };
+const parseYmd = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const dayDiff = (a, b) => Math.round((parseYmd(b) - parseYmd(a)) / 864e5);
+const fmtDay = s => { const today = ymd(Date.now()); if (s === today) return "Today"; if (s === addDays(today,-1)) return "Yesterday"; return parseYmd(s).toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"}); };
+const fmtTime = t => new Date(t).toLocaleTimeString(undefined,{hour:"numeric",minute:"2-digit"});
+const shortDay = d => parseYmd(d).toLocaleDateString(undefined,{month:"short",day:"numeric"});
+const mean = a => a.reduce((s,x)=>s+x,0) / a.length;
+const variance = a => { if (a.length < 2) return 0; const m = mean(a); return a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1); };
+const rateColor = r => { if (r == null) return "#9a8f86"; const t = Math.max(0, Math.min(10, r)) / 10; return `hsl(${140 - 135*t} 50% ${44 - 4*t}%)`; };
+const badge = (r, ai) => r == null ? "" : `<span class="badge${ai?" ai":""}" title="${ai?"AI estimate":"Your rating"}" style="background:${rateColor(r)}">${Math.round(r*10)/10}</span>`;
+const normName = s => String(s||"").trim();
+const keyOf = (type, name) => type + ":" + normName(name).toLowerCase();
+const uidGen = () => "e_" + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+let toastT;
+function toast(msg, ms=2600){ const t=$("#toast"); t.textContent=msg; t.classList.remove("hidden"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.add("hidden"), ms); }
+const CATS = ["cleanser","toner","serum","treatment","exfoliant","moisturizer","sunscreen","spot treatment","mask","medication","supplement","makeup","other"];
+
+/* ================= local storage (IndexedDB) ================= */
+const store = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    const r = indexedDB.open("skinlog", 1);
+    r.onupgradeneeded = () => { const d = r.result; d.createObjectStore("entries", { keyPath: "id" }); d.createObjectStore("photos"); d.createObjectStore("kv"); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  }));
+  const run = (name, mode, fn) => open().then(d => new Promise((res, rej) => {
+    const t = d.transaction(name, mode); const req = fn(t.objectStore(name));
+    t.oncomplete = () => res(req && "result" in req ? req.result : undefined);
+    t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+  }));
+  return {
+    allEntries: () => run("entries", "readonly", s => s.getAll()),
+    putEntry: e => run("entries", "readwrite", s => s.put(e)),
+    delEntry: id => run("entries", "readwrite", s => s.delete(id)),
+    getPhoto: id => run("photos", "readonly", s => s.get(id)),
+    putPhoto: (id, blob) => run("photos", "readwrite", s => s.put(blob, id)),
+    delPhoto: id => run("photos", "readwrite", s => s.delete(id)),
+    allPhotoKeys: () => run("photos", "readonly", s => s.getAllKeys()),
+    get: k => run("kv", "readonly", s => s.get(k)),
+    set: (k, v) => run("kv", "readwrite", s => s.put(v, k)),
+    clearAll: () => open().then(d => new Promise((res, rej) => { const t = d.transaction(["entries","photos","kv"], "readwrite"); ["entries","photos","kv"].forEach(n => t.objectStore(n).clear()); t.oncomplete = res; t.onerror = () => rej(t.error); })),
+  };
+})();
+const photoURLs = new Map();
+async function photoURL(id){
+  if (photoURLs.has(id)) return photoURLs.get(id);
+  const b = await store.getPhoto(id).catch(()=>null); if (!b) return "";
+  const u = URL.createObjectURL(b); photoURLs.set(id, u); return u;
+}
+function hydratePhotos(root=document){
+  root.querySelectorAll("img[data-pid]").forEach(async img => {
+    const id = img.dataset.pid; if (img.dataset.loaded === id) return;
+    img.dataset.loaded = id; const u = await photoURL(id); if (u) img.src = u;
+  });
+}
+
+/* ================= Claude API ================= */
+let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true };
+async function saveSettings(){ await store.set("settings", settings).catch(()=>{}); }
+async function claude(content, { model, max_tokens = 1500, signal } = {}){
+  if (!settings.apiKey) throw { code: "no_key", message: "Add your Anthropic API key in Settings." };
+  if (!navigator.onLine) throw { code: "offline", message: "Offline" };
+  let r;
+  try {
+    r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", signal,
+      headers: { "content-type": "application/json", "x-api-key": settings.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify({ model: model || settings.parseModel, max_tokens, messages: [{ role: "user", content }] }) });
+  } catch (e) { if (e.name === "AbortError") throw { code: "cancelled" }; throw { code: "network", message: "Network error" }; }
+  if (!r.ok) { let m = ""; try { m = (await r.json()).error?.message || ""; } catch {}
+    throw { code: r.status === 401 ? "bad_key" : r.status === 429 ? "rate_limited" : r.status === 529 ? "overloaded" : "http_" + r.status, message: m || ("HTTP " + r.status) }; }
+  const j = await r.json();
+  return (j.content || []).filter(c => c.type === "text").map(c => c.text).join("");
+}
+function parseJSON(t){
+  try { return JSON.parse(t); } catch {}
+  const f = t.match(/```(?:json)?\s*([\s\S]*?)```/); if (f) { try { return JSON.parse(f[1]); } catch {} }
+  const i = [t.indexOf("{"), t.indexOf("[")].filter(x => x >= 0).sort((a,b)=>a-b)[0];
+  const j = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
+  if (i != null && j > i) { try { return JSON.parse(t.slice(i, j+1)); } catch {} }
+  throw { code: "invalid_json", message: "Couldn't read Claude's reply" };
+}
+const blobToB64 = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(b); });
+const errText = e => e?.code === "no_key" ? "Add your API key in Settings" : e?.code === "bad_key" ? "API key was rejected" : e?.code === "offline" || e?.code === "network" ? "Offline: will retry" : e?.code === "rate_limited" || e?.code === "overloaded" ? "Claude is busy: will retry" : (e?.message || "Error");
+
+/* ================= state ================= */
+let entries = [];          // newest first
+let analysis = null;
+let view = "log", histMode = "list", overlayKey = "";
+let lastSavedId = null;
+const LAGS = [{a:1,b:1,l:"Next day"},{a:1,b:3,l:"1–3 days"},{a:4,b:10,l:"4–10 days"},{a:11,b:28,l:"2–4 wks"}];
+const draft = { blob:null, url:null, rating:null };
+
+function sortEntries(){ entries.sort((x,y)=> y.ts - x.ts); }
+async function putEntry(e){ const i = entries.findIndex(x=>x.id===e.id); if (i>=0) entries[i] = e; else entries.push(e); sortEntries(); await store.putEntry(e); render(); }
+async function patchEntry(id, patch){ const e = entries.find(x=>x.id===id); if (!e) return; Object.assign(e, patch); await store.putEntry(e); render(); }
+
+/* ================= boot ================= */
+async function boot(){
+  renderRates();
+  try { const s = await store.get("settings"); if (s) settings = { ...settings, ...s }; } catch {}
+  if (settings.liveCam) startCamera(); else showSysCam();
+  try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; }
+  catch { $("#banner").innerHTML = `<div class="banner">This browser blocked local storage, so entries can't be saved. Open the app from your home screen icon.</div>`; }
+  updateGhost();
+  renderBanner();
+  render();
+  setupMic();
+  if (navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
+  processQueue();
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("sw.js").catch(()=>{});
+}
+function renderBanner(){
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone;
+  let h = "";
+  if (!settings.apiKey) h += `<div class="banner">Add your Anthropic API key so Haiku can turn memos into tables. <button data-settings>Open settings</button></div>`;
+  if (!standalone && /iPhone|iPad/.test(navigator.userAgent)) h += `<div class="banner">For instant launch: tap <b>Share</b> → <b>Add to Home Screen</b>, then open Skin Log from the icon. Data saved here in Safari stays separate from the home-screen app.</div>`;
+  $("#banner").innerHTML = h;
+}
+window.addEventListener("online", processQueue);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopCamera();
+  else { if (view === "log" && $("#draft").classList.contains("hidden") && settings.liveCam) startCamera(); processQueue(); }
+});
+document.addEventListener("click", e => {
+  const o = e.target.closest("[data-open]"); if (o) openSheet(o.dataset.open);
+  if (e.target.closest("[data-settings]")) openSettings();
+});
+
+/* ================= nav ================= */
+$("#nav").addEventListener("click", e => { const b = e.target.closest("button[data-v]"); if (b) setView(b.dataset.v); });
+function setView(v){
+  view = v;
+  document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
+  ["log","history","products","insights"].forEach(n=>$("#v-"+n).classList.toggle("hidden", n!==v));
+  if (v === "log" && $("#draft").classList.contains("hidden") && settings.liveCam) startCamera(); else stopCamera();
+  window.scrollTo(0,0); render();
+}
+$("#histSeg").addEventListener("click", e => { const b=e.target.closest("button"); if(!b) return; histMode=b.dataset.m; document.querySelectorAll("#histSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderHistory(); });
+function render(){
+  if (view==="log") renderLastSaved();
+  else if (view==="history") renderHistory();
+  else if (view==="products") renderProducts();
+  else if (view==="insights") renderInsights();
+  if (sheetMode === "entry" && sheetEntryId) renderSheet();
+}
+
+/* ================= camera ================= */
+let stream = null, camStarting = false;
+async function startCamera(){
+  if (stream || camStarting) return;
+  if (!navigator.mediaDevices?.getUserMedia) { showSysCam(); return; }
+  camStarting = true;
+  $("#cam").classList.remove("hidden"); $("#sysCamBig").classList.add("hidden");
+  $("#camMsg").classList.remove("hidden"); $("#camMsg").innerHTML = `<div>Starting camera…</div>`;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: settings.facing, width: { ideal: 1920 }, height: { ideal: 2560 } }, audio: false });
+    if (document.hidden || view !== "log" || !$("#draft").classList.contains("hidden")) { stopCamera(); return; }
+    const v = $("#video"); v.srcObject = stream; await v.play().catch(()=>{});
+    $("#cam").classList.toggle("mirror", settings.facing === "user");
+    $("#camMsg").classList.add("hidden");
+  } catch (e) {
+    stream = null;
+    $("#camMsg").innerHTML = `<div>Camera access is off.</div><button class="btn" id="camRetry" style="background:#fff;color:#111">Try again</button><div style="font-size:12px;opacity:.75">Or use “System camera” below.</div>`;
+    const r = $("#camRetry"); if (r) r.onclick = () => startCamera();
+  } finally { camStarting = false; }
+}
+function stopCamera(){ if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; } const v = $("#video"); if (v) v.srcObject = null; }
+function showSysCam(){ $("#cam").classList.add("hidden"); $("#sysCamBig").classList.remove("hidden"); }
+$("#shutter").addEventListener("click", async () => {
+  const v = $("#video"); if (!stream || !v.videoWidth) { $("#sysCam").click(); return; }
+  const max = 1600, s = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.86));
+  if (navigator.vibrate) navigator.vibrate(10);
+  stopCamera(); openDraft(blob);
+});
+$("#flipBtn").addEventListener("click", async () => { settings.facing = settings.facing === "user" ? "environment" : "user"; saveSettings(); stopCamera(); startCamera(); });
+$("#ghostBtn").addEventListener("click", () => { settings.ghost = !settings.ghost; saveSettings(); updateGhost(); });
+async function updateGhost(){
+  const last = entries.find(e => e.photoId);
+  const g = $("#ghost"), b = $("#ghostBtn");
+  b.classList.toggle("hidden", !last); b.classList.toggle("on", !!settings.ghost);
+  if (last) { g.src = await photoURL(last.photoId); g.classList.toggle("on", !!settings.ghost); } else g.classList.remove("on");
+}
+
+/* ================= capture → draft ================= */
+$("#sysCam").addEventListener("change", e => onPicked(e.target));
+$("#lib").addEventListener("change", e => onPicked(e.target));
+$("#nophoto").addEventListener("click", () => { stopCamera(); openDraft(null); });
+$("#retake").addEventListener("click", () => { resetDraft(true); });
+$("#cancel").addEventListener("click", () => resetDraft(true));
+async function onPicked(input){
+  const f = input.files[0]; input.value = ""; if (!f) return;
+  stopCamera();
+  let b; try { b = await compress(f, 1600); } catch { b = f; }
+  openDraft(b);
+}
+async function compress(blob, max){
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image(); img.src = url; await img.decode();
+    const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth*s); c.height = Math.round(img.naturalHeight*s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(), "image/jpeg", 0.85));
+  } finally { URL.revokeObjectURL(url); }
+}
+function openDraft(blob){
+  if (draft.url) URL.revokeObjectURL(draft.url);
+  draft.blob = blob; draft.url = blob ? URL.createObjectURL(blob) : null;
+  $("#capture").classList.add("hidden"); $("#draft").classList.remove("hidden");
+  $("#previewWrap").classList.toggle("hidden", !blob);
+  if (blob) $("#preview").src = draft.url;
+  renderLastSaved();
+}
+function resetDraft(restartCam){
+  stopMic();
+  if (draft.url) URL.revokeObjectURL(draft.url);
+  Object.assign(draft, { blob:null, url:null, rating:null });
+  $("#memo").value = ""; renderRates();
+  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
+  if (restartCam !== false && settings.liveCam && view === "log") startCamera();
+  renderLastSaved();
+}
+function renderRates(){
+  const el = $("#rates"); el.innerHTML = "";
+  for (let i=0;i<=10;i++){
+    const b = document.createElement("button"); b.textContent = i;
+    if (draft.rating === i) { b.className = "on"; b.style.background = rateColor(i); }
+    b.onclick = () => { draft.rating = draft.rating === i ? null : i; renderRates(); };
+    el.appendChild(b);
+  }
+}
+
+/* ================= voice (live speech-to-text) ================= */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, recBase = "", recOn = false;
+function setupMic(){
+  const btn = $("#micBtn");
+  if (!SR) { $("#memoHint").textContent = "Tap the 🎙 on your keyboard to dictate. Haiku turns it into a usage table after you save."; return; }
+  btn.classList.remove("hidden");
+  btn.onclick = () => recOn ? stopMic() : startMic();
+}
+function startMic(){
+  try {
+    rec = new SR(); rec.lang = navigator.language || "en-US"; rec.continuous = true; rec.interimResults = true;
+    const ta = $("#memo"); recBase = ta.value ? ta.value.replace(/\s*$/, " ") : "";
+    let finals = "";
+    rec.onresult = ev => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i]; if (r.isFinal) finals += r[0].transcript + " "; else interim += r[0].transcript;
+      }
+      ta.value = recBase + finals + interim;
+    };
+    rec.onerror = ev => { if (ev.error === "not-allowed" || ev.error === "service-not-allowed") { toast("Microphone not allowed. Use the keyboard mic instead."); $("#micBtn").classList.add("hidden"); } };
+    rec.onend = () => { recOn = false; paintMic(); };
+    rec.start(); recOn = true; paintMic();
+  } catch { recOn = false; paintMic(); toast("Couldn't start the mic"); }
+}
+function stopMic(){ if (rec) { try { rec.stop(); } catch {} } recOn = false; paintMic(); }
+function paintMic(){ const b = $("#micBtn"); b.classList.toggle("rec", recOn); b.querySelector("span").textContent = recOn ? "Listening… tap to stop" : "Tap to talk"; b.querySelector("svg").style.display = recOn ? "none" : ""; let d = b.querySelector(".dot"); if (recOn && !d) { d = document.createElement("i"); d.className = "dot"; b.prepend(d); } if (!recOn && d) d.remove(); }
+
+/* ================= save + background AI queue ================= */
+$("#save").addEventListener("click", saveDraft);
+async function saveDraft(){
+  stopMic();
+  const memo = $("#memo").value.trim();
+  if (!draft.blob && !memo && draft.rating == null) { toast("Add a photo, rating, or memo first"); return; }
+  const now = Date.now(), id = uidGen();
+  let photoId = null;
+  if (draft.blob) { photoId = "p_" + id.slice(2); try { await store.putPhoto(photoId, draft.blob); } catch { photoId = null; toast("Couldn't store the photo"); } }
+  const e = { id, ts: now, date: ymd(now), photoId, rating: draft.rating, memo, products: [], factors: [], skin: "", summary: "", ai: null,
+              needsParse: !!memo, needsAi: !!(photoId && settings.aiPhoto), status: memo ? "queued" : "ok", error: "" };
+  try { await putEntry(e); } catch { toast("Couldn't save. Storage may be full."); return; }
+  lastSavedId = id;
+  resetDraft(true);
+  updateGhost();
+  toast("Saved");
+  processQueue();
+}
+let queueRunning = false;
+async function processQueue(){
+  if (queueRunning || !settings.apiKey || !navigator.onLine) return;
+  queueRunning = true;
+  try {
+    for (const e of entries.slice().filter(x => x.needsParse || x.needsAi).reverse()) {
+      if (e.needsParse) {
+        await patchEntry(e.id, { status: "parsing" });
+        try { const p = await parseMemo(e.memo, e.ts); await patchEntry(e.id, { ...p, needsParse: false, status: "ok", error: "" }); }
+        catch (err) {
+          const transient = ["offline","network","rate_limited","overloaded"].includes(err.code) || String(err.code).startsWith("http_5");
+          const keyProblem = err.code === "bad_key" || err.code === "no_key";
+          if (transient) { await patchEntry(e.id, { status: "queued" }); break; }
+          if (keyProblem) { await patchEntry(e.id, { status: "error", error: errText(err) }); break; }   // stays queued for when the key is fixed
+          await patchEntry(e.id, { status: "error", error: errText(err), needsParse: false });
+        }
+      }
+      if (e.needsAi && e.photoId) {
+        try { const blob = await store.getPhoto(e.photoId); if (blob) { const ai = await assessPhoto(blob); await patchEntry(e.id, { ai, needsAi: false }); } else await patchEntry(e.id, { needsAi: false }); }
+        catch (err) { if (["offline","network","rate_limited","overloaded"].includes(err.code)) break; await patchEntry(e.id, { needsAi: false }); }
+      }
+    }
+  } finally { queueRunning = false; }
+}
+function knownNames(){
+  const p = new Map(), f = new Map();
+  for (const e of entries) { for (const x of e.products||[]) if (x.name) p.set(x.name.toLowerCase(), x.name); for (const x of e.factors||[]) if (x.name) f.set(x.name.toLowerCase(), x.name); }
+  return { products: [...p.values()].slice(0,150), factors: [...f.values()].slice(0,100) };
+}
+async function parseMemo(memo, ts){
+  const k = knownNames(), d = new Date(ts);
+  const prompt = `You turn a person's spoken skincare/acne log (dictated, may have speech-to-text errors) into structured data.
+Logged: ${d.toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})} at ${d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}.
+Products already in their log (reuse the EXACT name when the memo refers to one of these, even loosely, e.g. "the cerave stuff"): ${JSON.stringify(k.products)}
+Factors already in their log (reuse exact names when equivalent): ${JSON.stringify(k.factors)}
+
+Memo:
+"""${memo.slice(0, 6000)}"""
+
+Reply with only JSON, no prose:
+{"products":[{"name":"Brand Product Name","category":"${CATS.join("|")}","time":"am"|"pm"|"other","dayOffset":0,"amount":"","note":""}],
+ "factors":[{"name":"short lowercase factor","dayOffset":0,"detail":""}],
+ "skin":"what they say about their skin today, short, or empty",
+ "summary":"one short line"}
+
+Rules:
+- products: anything applied to the face/skin or taken for skin (topicals, prescriptions like tretinoin/spironolactone/antibiotics, supplements, makeup, pimple patches). Title Case, brand first when known. Fix obvious dictation errors in product names. Omit products they explicitly skipped.
+- factors: lifestyle/environment that might affect acne: sleep (e.g. "poor sleep" with detail "5 hrs"), stress, specific foods/drinks (dairy, sugar, alcohol, fried food, whey…), exercise/sweat, period/cycle, picking, touching face, slept in makeup, new pillowcase, shaving, sun, travel, illness, new medication. Use short canonical names like "dairy", "poor sleep", "picked skin". Only include what was actually said.
+- dayOffset: -1 if it happened yesterday / last night, else 0. time "pm" for night/evening routine.
+- Empty arrays if nothing applies.`;
+  const r = parseJSON(await claude(prompt, { model: settings.parseModel, max_tokens: 1500 }));
+  const prods = Array.isArray(r?.products) ? r.products : [], facs = Array.isArray(r?.factors) ? r.factors : [];
+  return {
+    products: prods.filter(x=>x&&x.name).slice(0,40).map(x => ({ name: normName(x.name).slice(0,80), category: CATS.includes(x.category) ? x.category : "other",
+      time: ["am","pm","other"].includes(x.time) ? x.time : "other", dayOffset: x.dayOffset === -1 ? -1 : 0, amount: String(x.amount||"").slice(0,60), note: String(x.note||"").slice(0,120) })),
+    factors: facs.filter(x=>x&&x.name).slice(0,30).map(x => ({ name: normName(x.name).toLowerCase().slice(0,60), dayOffset: x.dayOffset === -1 ? -1 : 0, detail: String(x.detail||"").slice(0,80) })),
+    skin: String(r?.skin||"").slice(0,300), summary: String(r?.summary||"").slice(0,200)
+  };
+}
+async function assessPhoto(blob){
+  const small = await compress(blob, 1100).catch(() => blob);
+  const data = await blobToB64(small);
+  const text = `This is a photo a person took of their own face/skin to track their acne over time. Assess only visible acne, consistently, as a dermatology-style severity estimate.
+Reply with only JSON:
+{"score": number 0-10 or null, "inflamed": integer estimate of red/inflamed papules+pustules, "comedones": "none"|"few"|"many", "regions": ["forehead"|"temples"|"cheeks"|"nose"|"chin"|"jawline"|"neck"|"chest"|"back"], "note": "one short neutral sentence"}
+Scale: 0 = clear; 1-2 = a few small spots; 3-4 = mild-moderate, several papules; 5-6 = moderate, many inflamed lesions; 7-8 = severe, widespread or nodules/cysts; 9-10 = extreme.
+If skin is not clearly visible (blurry, too dark, not skin), use score null and explain in note.`;
+  const r = parseJSON(await claude([{ type: "image", source: { type: "base64", media_type: "image/jpeg", data } }, { type: "text", text }], { model: settings.parseModel, max_tokens: 400 }));
+  const score = typeof r.score === "number" ? Math.max(0, Math.min(10, r.score)) : null;
+  return { score, inflamed: Number.isFinite(+r.inflamed) ? Math.round(+r.inflamed) : null, comedones: r.comedones ? String(r.comedones) : null,
+           regions: Array.isArray(r.regions) ? r.regions.map(String).slice(0,8) : [], note: r.note ? String(r.note).slice(0,240) : "" };
+}
+
+/* ================= shared renderers ================= */
+function entryRating(e){ if (e.rating != null) return { r: e.rating, ai: false }; if (e.ai && e.ai.score != null) return { r: e.ai.score, ai: true }; return { r: null }; }
+function usageTable(e){
+  const p = e.products||[], f = e.factors||[];
+  if (e.status === "parsing") return `<div class="sub"><span class="spin"></span> Haiku is building your table…</div>`;
+  if (e.status === "queued") return `<div class="sub">${settings.apiKey ? (navigator.onLine ? `<span class="spin"></span> Queued…` : "Offline: will parse when you're back online.") : `Add your API key in <button data-settings style="text-decoration:underline">Settings</button> to parse this memo.`}</div>`;
+  if (e.status === "error" && !p.length && !f.length) return `<div class="sub">Couldn't parse: ${esc(e.error)}${e.needsParse?" (will retry)":""}</div>`;
+  if (!p.length && !f.length) return e.memo ? `<div class="sub">No products or factors found in the memo.</div>` : "";
+  let h = "";
+  if (p.length) h += `<div class="tablewrap"><table><tr><th>Product</th><th>Type</th><th>When</th></tr>${p.map(x=>`<tr><td>${esc(x.name)}${x.amount?` <span class="sub">· ${esc(x.amount)}</span>`:""}</td><td>${esc(x.category)}</td><td>${x.time==="other"?"":esc(x.time.toUpperCase())}${x.dayOffset===-1?" <span class='sub'>(yday)</span>":""}</td></tr>`).join("")}</table></div>`;
+  if (f.length) h += `<div class="chips" style="margin-top:10px">${f.map(x=>`<span class="chip f">${esc(x.name)}${x.detail?` · ${esc(x.detail)}`:""}${x.dayOffset===-1?" (yday)":""}</span>`).join("")}</div>`;
+  return h;
+}
+function renderLastSaved(){
+  const el = $("#lastSaved");
+  if (!$("#draft").classList.contains("hidden")) { el.innerHTML = ""; return; }
+  let h = "";
+  const e = lastSavedId && entries.find(x=>x.id===lastSavedId);
+  if (e) {
+    const rr = entryRating(e);
+    h += `<h2>Just logged</h2><div class="card"><div class="row" style="justify-content:space-between;margin-bottom:10px"><div><b>${fmtDay(e.date)}</b> <span class="sub">${fmtTime(e.ts)}</span></div>${badge(rr.r, rr.ai)}</div>
+      ${e.summary?`<div class="sub" style="margin-bottom:8px">${esc(e.summary)}</div>`:""}${usageTable(e)}
+      <div class="row" style="margin-top:12px"><button class="btn small" data-open="${e.id}">Edit</button></div></div>`;
+  }
+  if (entries.length) {
+    const days = new Set(entries.map(x=>x.date)); let streak = 0, d = ymd(Date.now());
+    if (!days.has(d)) d = addDays(d, -1);
+    while (days.has(d)) { streak++; d = addDays(d,-1); }
+    h += `<div class="sub" style="text-align:center;margin-top:14px">${entries.length} entr${entries.length===1?"y":"ies"} · ${days.size} day${days.size===1?"":"s"} logged${streak>1?` · ${streak}-day streak`:""}</div>`;
+  } else {
+    h += `<div class="card" style="margin-top:16px"><h3 style="margin-top:0">How it works</h3><div class="sub">1. Snap a photo each morning and/or night. “Align” overlays your last photo so the angle matches.<br>2. Rate your skin and say what you used, ate, and how you slept.<br>3. After a few weeks, Insights compares your skin on days after each product or habit with days without it.</div></div>`;
+  }
+  el.innerHTML = h;
+}
+
+/* ================= history ================= */
+function renderHistory(){
+  const el = $("#histBody");
+  if (!entries.length) { el.innerHTML = `<div class="empty">No entries yet. Log your first one from the Log tab.</div>`; return; }
+  if (histMode === "photos") {
+    const ph = entries.filter(e=>e.photoId);
+    el.innerHTML = ph.length ? `<div class="grid">${ph.map(e=>{ const rr=entryRating(e); return `<div class="g" data-open="${e.id}"><img data-pid="${esc(e.photoId)}" alt="">${badge(rr.r, rr.ai)}<span class="d">${esc(shortDay(e.date))}</span></div>`; }).join("")}</div>` : `<div class="empty">No photos yet.</div>`;
+    hydratePhotos(el); return;
+  }
+  let h = "", last = "";
+  for (const e of entries.slice(0, 400)) {
+    if (e.date !== last) { h += `<div class="daylabel">${esc(fmtDay(e.date))}</div>`; last = e.date; }
+    const rr = entryRating(e);
+    const chips = [...(e.products||[]).map(p=>`<span class="chip">${esc(p.name)}</span>`), ...(e.factors||[]).map(f=>`<span class="chip f">${esc(f.name)}</span>`)].join("");
+    h += `<div class="card entry" data-open="${e.id}">
+      ${e.photoId?`<img class="thumb" data-pid="${esc(e.photoId)}" alt="">`:`<div class="thumb">✎</div>`}
+      <div class="meta"><div class="row" style="justify-content:space-between"><span class="sub">${fmtTime(e.ts)}</span>${badge(rr.r, rr.ai)}</div>
+      ${e.status==="parsing"||e.status==="queued"?`<div class="sub">${e.status==="parsing"?'<span class="spin"></span> parsing…':"queued"}</div>`:""}
+      ${chips?`<div class="chips">${chips}</div>`:(e.memo?`<div class="memo">${esc(e.memo)}</div>`:"")}</div></div>`;
+  }
+  el.innerHTML = h; hydratePhotos(el);
+}
+
+/* ================= sheet (entry detail / settings) ================= */
+let sheetMode = null, sheetEntryId = null, editState = null, delArm = false;
+function showSheet(){ $("#sheet").classList.remove("hidden"); document.body.style.overflow = "hidden"; }
+function closeSheet(){ sheetMode = null; sheetEntryId = null; editState = null; $("#sheet").classList.add("hidden"); document.body.style.overflow = ""; }
+$("#sheet").addEventListener("click", e => { if (e.target.id === "sheet") closeSheet(); });
+function openSheet(id){
+  const e = entries.find(x=>x.id===id); if (!e) return;
+  sheetMode = "entry"; sheetEntryId = id; delArm = false;
+  editState = { rating: e.rating, memo: e.memo||"", products: structuredClone(e.products||[]), factors: structuredClone(e.factors||[]), dirty: false };
+  showSheet(); renderSheet();
+}
+function renderSheet(){
+  const e = entries.find(x=>x.id===sheetEntryId); if (!e) { closeSheet(); return; }
+  const s = editState;
+  if (!s.dirty) { s.products = structuredClone(e.products||[]); s.factors = structuredClone(e.factors||[]); s.memo = e.memo||""; s.rating = e.rating; }
+  const a = e.ai;
+  const catOpts = v => CATS.map(c=>`<option${c===v?" selected":""}>${c}</option>`).join("");
+  const timeOpts = (t, o) => [["am",0,"AM"],["pm",0,"PM"],["pm",-1,"Last night"],["am",-1,"Yday AM"],["other",0,"Today"],["other",-1,"Yesterday"]].map(([tt,oo,l])=>`<option value="${tt}|${oo}"${tt===t&&oo===(o||0)?" selected":""}>${l}</option>`).join("");
+  const scroll = $("#sheetPanel").scrollTop;
+  $("#sheetPanel").innerHTML = `<div class="grab"></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px"><div><h2 style="margin:0">${esc(fmtDay(e.date))}</h2><div class="sub">${fmtTime(e.ts)}</div></div><button class="btn" id="shClose">Done</button></div>
+    ${e.photoId?`<div class="preview" style="margin-bottom:10px"><img data-pid="${esc(e.photoId)}" alt="" style="max-height:none"></div>`:""}
+    ${a&&a.score!=null?`<div class="ai" style="margin-bottom:6px">${badge(a.score,true)}<span><b>AI estimate</b>${a.inflamed!=null?` · ~${esc(a.inflamed)} inflamed`:""}${a.regions?.length?` · ${esc(a.regions.join(", "))}`:""}${a.note?`<br>${esc(a.note)}`:""}</span></div>`:(e.needsAi?`<div class="ai"><span class="spin"></span> AI estimate pending</div>`:"")}
+    <div class="label">Your rating <span>0 clear · 10 worst</span></div>
+    <div class="rates" id="shRates"></div>
+    <div class="label">Products</div>
+    <div>${s.products.map((p,i)=>`<div class="edit-row"><input data-p="${i}" data-k="name" value="${esc(p.name)}" placeholder="Product"><select data-p="${i}" data-k="when">${timeOpts(p.time,p.dayOffset)}</select><button class="rm" data-rmp="${i}">×</button><select class="wide" data-p="${i}" data-k="category">${catOpts(p.category)}</select></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
+    <button class="btn small" id="addP">+ Product</button>
+    <div class="label">Factors <span>food, sleep, stress…</span></div>
+    <div>${s.factors.map((f,i)=>`<div class="edit-row"><input data-f="${i}" data-k="name" value="${esc(f.name)}" placeholder="e.g. dairy"><select data-f="${i}" data-k="day"><option value="0"${!f.dayOffset?" selected":""}>Today</option><option value="-1"${f.dayOffset===-1?" selected":""}>Yesterday</option></select><button class="rm" data-rmf="${i}">×</button></div>`).join("") || `<div class="sub" style="margin-bottom:6px">None</div>`}</div>
+    <button class="btn small" id="addF">+ Factor</button>
+    <div class="label">Memo</div>
+    <textarea id="shMemo">${esc(s.memo)}</textarea>
+    <div class="row" style="margin-top:8px"><button class="btn small" id="reparse">${e.status==="parsing"?`<span class="spin"></span> Parsing…`:"Re-parse memo with Haiku"}</button></div>
+    <button class="primary" id="shSave">Save changes</button>
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn danger small" id="shDel">${delArm?"Tap again to delete":"Delete entry"}</button></div>`;
+  $("#sheetPanel").scrollTop = scroll;
+  hydratePhotos($("#sheetPanel"));
+  const rEl = $("#shRates");
+  for (let i=0;i<=10;i++){ const b=document.createElement("button"); b.textContent=i; if(s.rating===i){b.className="on";b.style.background=rateColor(i);} b.onclick=()=>{s.rating = s.rating===i?null:i; s.dirty=true; renderSheet();}; rEl.appendChild(b); }
+  $("#shClose").onclick = closeSheet;
+  const onEdit = ev => {
+    const t = ev.target; if (!t.matches("input,select,textarea")) return; s.dirty = true;
+    if (t.id === "shMemo") { s.memo = t.value; return; }
+    if (t.dataset.p != null) { const p = s.products[+t.dataset.p]; if (t.dataset.k==="when") { const [tt,oo]=t.value.split("|"); p.time=tt; p.dayOffset=+oo; } else p[t.dataset.k] = t.value; }
+    if (t.dataset.f != null) { const f = s.factors[+t.dataset.f]; if (t.dataset.k==="day") f.dayOffset = +t.value; else f.name = t.value; }
+  };
+  $("#sheetPanel").oninput = onEdit; $("#sheetPanel").onchange = onEdit;
+  $("#sheetPanel").querySelectorAll("[data-rmp]").forEach(b=>b.onclick=()=>{ s.products.splice(+b.dataset.rmp,1); s.dirty=true; renderSheet(); });
+  $("#sheetPanel").querySelectorAll("[data-rmf]").forEach(b=>b.onclick=()=>{ s.factors.splice(+b.dataset.rmf,1); s.dirty=true; renderSheet(); });
+  $("#addP").onclick = () => { s.products.push({name:"",category:"other",time:"other",dayOffset:0,amount:"",note:""}); s.dirty=true; renderSheet(); };
+  $("#addF").onclick = () => { s.factors.push({name:"",dayOffset:0,detail:""}); s.dirty=true; renderSheet(); };
+  $("#reparse").onclick = async () => {
+    if (e.status === "parsing" || !s.memo.trim()) return;
+    if (!settings.apiKey) { toast("Add your API key in Settings"); return; }
+    s.dirty = false;
+    await patchEntry(e.id, { memo: s.memo.trim(), needsParse: true, status: "queued" });
+    processQueue();
+  };
+  $("#shSave").onclick = async () => {
+    const products = s.products.filter(p=>normName(p.name)).map(p=>({...p, name: normName(p.name)}));
+    const factors = s.factors.filter(f=>normName(f.name)).map(f=>({...f, name: normName(f.name).toLowerCase()}));
+    try { await patchEntry(e.id, { rating: s.rating, memo: s.memo.trim(), products, factors, ...(e.status==="error"&&!e.needsParse?{status:"ok"}:{}) }); toast("Saved"); closeSheet(); }
+    catch { toast("Couldn't save"); }
+  };
+  $("#shDel").onclick = async () => {
+    if (!delArm) { delArm = true; renderSheet(); setTimeout(()=>{ if(delArm && sheetEntryId===e.id){delArm=false; renderSheet();} }, 3500); return; }
+    try {
+      if (e.photoId) { await store.delPhoto(e.photoId).catch(()=>{}); const u = photoURLs.get(e.photoId); if (u) { URL.revokeObjectURL(u); photoURLs.delete(e.photoId); } }
+      await store.delEntry(e.id); entries = entries.filter(x=>x.id!==e.id);
+      if (lastSavedId===e.id) lastSavedId=null; closeSheet(); updateGhost(); render(); toast("Deleted");
+    } catch { toast("Couldn't delete"); }
+  };
+}
+
+/* ---------- settings ---------- */
+$("#openSettings").addEventListener("click", openSettings);
+let wipeArm = false;
+async function openSettings(){ sheetMode = "settings"; wipeArm = false; showSheet(); renderSettings(); }
+async function renderSettings(){
+  let usage = "";
+  try { const est = await navigator.storage.estimate(); usage = `${(est.usage/1048576).toFixed(1)} MB used on this phone`; } catch {}
+  const persisted = await navigator.storage?.persisted?.().catch(()=>false);
+  const models = [["claude-haiku-5-5","Haiku 5.5 (fast, cheapest)"],["claude-sonnet-5-5","Sonnet 5.5 (smarter)"],["claude-opus-5-5","Opus 5.5 (most capable)"]];
+  const sel = (id, v) => `<select id="${id}">${models.map(([m,l])=>`<option value="${m}"${m===v?" selected":""}>${l}</option>`).join("")}</select>`;
+  $("#sheetPanel").innerHTML = `<div class="grab"></div>
+    <div class="row" style="justify-content:space-between;margin-bottom:8px"><h2 style="margin:0">Settings</h2><button class="btn" id="stClose">Done</button></div>
+    <div class="card">
+      <div class="label" style="margin-top:0">Anthropic API key</div>
+      <input id="stKey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…" value="${esc(settings.apiKey)}">
+      <div class="hint">Stored only on this phone and sent only to api.anthropic.com. Get one at console.anthropic.com → API keys.</div>
+      <div class="row" style="margin-top:10px"><button class="btn small" id="stTest">Save &amp; test</button><span class="sub" id="stTestOut"></span></div>
+      <div class="label">Memo + photo model</div>${sel("stParse", settings.parseModel)}
+      <div class="label">Insights analysis model</div>${sel("stAnalysis", settings.analysisModel)}
+    </div>
+    <div class="card">
+      <label class="toggle"><span>AI acne estimate from each photo<div class="sub">Fills in a score on days you don't rate</div></span><input type="checkbox" id="stAiPhoto"${settings.aiPhoto?" checked":""}></label>
+      <label class="toggle"><span>Open camera on launch<div class="sub">Turn off to use the system camera</div></span><input type="checkbox" id="stCam"${settings.liveCam?" checked":""}></label>
+    </div>
+    <div class="card">
+      <div class="label" style="margin-top:0">Your data <span>${esc(usage)}</span></div>
+      <div class="sub" style="margin-bottom:10px">Everything lives on this phone${persisted?" (protected from automatic cleanup)":""}. Export a backup now and then; deleting the home-screen app deletes its data.</div>
+      <div class="row"><button class="btn small" id="stExport">Export backup</button><button class="btn small" id="stImport">Import backup</button><button class="btn small" id="stCsv">Copy CSV</button></div>
+      <div class="row" style="margin-top:14px"><button class="btn small danger" id="stWipe">${wipeArm?"Tap again to erase everything":"Erase all data"}</button></div>
+    </div>`;
+  $("#stClose").onclick = () => { closeSheet(); renderBanner(); };
+  $("#stKey").onchange = () => { settings.apiKey = $("#stKey").value.trim(); saveSettings(); renderBanner(); processQueue(); };
+  $("#stParse").onchange = ev => { settings.parseModel = ev.target.value; saveSettings(); };
+  $("#stAnalysis").onchange = ev => { settings.analysisModel = ev.target.value; saveSettings(); };
+  $("#stAiPhoto").onchange = ev => { settings.aiPhoto = ev.target.checked; saveSettings(); };
+  $("#stCam").onchange = ev => { settings.liveCam = ev.target.checked; saveSettings(); if (settings.liveCam) { if (view==="log") startCamera(); } else { stopCamera(); showSysCam(); } };
+  $("#stTest").onclick = async () => {
+    settings.apiKey = $("#stKey").value.trim(); await saveSettings(); renderBanner();
+    const out = $("#stTestOut"); out.innerHTML = `<span class="spin"></span>`;
+    try { await claude("Reply with just: ok", { model: settings.parseModel, max_tokens: 5 }); out.textContent = "✓ Working"; processQueue(); }
+    catch (e) { out.textContent = "✗ " + errText(e); }
+  };
+  $("#stExport").onclick = exportBackup;
+  $("#stImport").onclick = () => $("#importFile").click();
+  $("#stCsv").onclick = async () => { try { await navigator.clipboard.writeText(toCsv()); toast("Copied. Paste into Sheets or Excel."); } catch { toast("Couldn't copy"); } };
+  $("#stWipe").onclick = async () => {
+    if (!wipeArm) { wipeArm = true; renderSettings(); return; }
+    await store.clearAll(); const key = settings.apiKey; entries = []; analysis = null; lastSavedId = null;
+    settings.apiKey = key; await saveSettings(); photoURLs.forEach(u=>URL.revokeObjectURL(u)); photoURLs.clear();
+    wipeArm = false; closeSheet(); updateGhost(); render(); toast("Erased");
+  };
+}
+async function exportBackup(){
+  toast("Preparing backup…", 8000);
+  const photos = {};
+  for (const e of entries) if (e.photoId) { const b = await store.getPhoto(e.photoId).catch(()=>null); if (b) photos[e.photoId] = await blobToB64(b); }
+  const json = JSON.stringify({ app: "skinlog", version: 1, exported: Date.now(), entries, analysis, photos });
+  const file = new File([json], `skinlog-backup-${ymd(Date.now())}.json`, { type: "application/json" });
+  try {
+    if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title: "Skin Log backup" }); toast("Backup ready"); return; }
+  } catch (e) { if (e.name === "AbortError") { toast("Cancelled"); return; } }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  toast("Backup downloaded");
+}
+$("#importFile").addEventListener("change", async ev => {
+  const f = ev.target.files[0]; ev.target.value = ""; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== "skinlog" || !Array.isArray(data.entries)) throw 0;
+    let n = 0;
+    for (const [id, b64] of Object.entries(data.photos || {})) {
+      const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) u8[i] = bin.charCodeAt(i);
+      await store.putPhoto(id, new Blob([u8], { type: "image/jpeg" }));
+    }
+    for (const e of data.entries) { if (!e || !e.id) continue; if (!entries.some(x=>x.id===e.id)) { entries.push(e); n++; } await store.putEntry(entries.find(x=>x.id===e.id)); }
+    if (data.analysis && !analysis) { analysis = data.analysis; await store.set("analysis", analysis); }
+    sortEntries(); updateGhost(); render(); if (sheetMode === "settings") renderSettings(); toast(`Imported ${n} new entr${n===1?"y":"ies"}`);
+  } catch { toast("That doesn't look like a Skin Log backup"); }
+});
+
+/* ================= analysis ================= */
+function dailyRatings(){
+  const m = new Map();
+  for (const e of entries) {
+    let r = e.rating, ai = false;
+    if (r == null && settings.useAiFill && e.ai && e.ai.score != null) { r = e.ai.score; ai = true; }
+    if (r == null) continue;
+    if (!m.has(e.date)) m.set(e.date, { you: [], ai: [] });
+    m.get(e.date)[ai ? "ai" : "you"].push(r);
+  }
+  const out = new Map();
+  for (const [d, v] of m) out.set(d, v.you.length ? mean(v.you) : mean(v.ai));
+  return out;
+}
+function exposureMap(){
+  const ex = new Map(), observed = new Set(), meta = new Map();
+  for (const e of entries.slice().reverse()) {
+    observed.add(e.date);
+    const add = (type, x) => {
+      const k = keyOf(type, x.name), d = addDays(e.date, x.dayOffset || 0);
+      observed.add(d);
+      if (!ex.has(k)) ex.set(k, new Set()); ex.get(k).add(d);
+      const m = meta.get(k) || { type, name: x.name, category: x.category, first: d, last: d };
+      if (d < m.first) m.first = d; if (d > m.last) m.last = d; if (x.category) m.category = x.category; m.name = x.name;
+      meta.set(k, m);
+    };
+    for (const p of e.products||[]) if (p.name) add("p", p);
+    for (const f of e.factors||[]) if (f.name) add("f", f);
+  }
+  return { ex, observed, meta };
+}
+function computeEffects(lag){
+  const ratings = dailyRatings(), { ex, observed, meta } = exposureMap(), res = [];
+  for (const [k, dates] of ex) {
+    const yes = [], no = [];
+    for (const [D, r] of ratings) {
+      const win = []; for (let i = lag.a; i <= lag.b; i++) win.push(addDays(D, -i));
+      if (!win.some(w => observed.has(w))) continue;
+      (win.some(w => dates.has(w)) ? yes : no).push(r);
+    }
+    if (yes.length < 2 || no.length < 2) continue;
+    const delta = mean(yes) - mean(no);
+    const se = Math.sqrt(variance(yes)/yes.length + variance(no)/no.length) || 0.5;
+    res.push({ k, ...meta.get(k), delta, se, nYes: yes.length, nNo: no.length, z: delta/se });
+  }
+  return res;
+}
+function startEffect(m, ratings){
+  const before = [], after = [];
+  for (const [d, r] of ratings) { const dd = dayDiff(m.first, d); if (dd >= -14 && dd <= -1) before.push(r); else if (dd >= 1 && dd <= 28) after.push(r); }
+  if (before.length < 2 || after.length < 2) return null;
+  return { before: mean(before), after: mean(after) };
+}
+
+function renderProducts(){
+  const el = $("#prodBody");
+  const { ex, meta } = exposureMap(), ratings = dailyRatings();
+  const rows = [...meta.entries()].map(([k, m]) => ({ k, ...m, days: ex.get(k).size, start: startEffect(m, ratings) }));
+  const prods = rows.filter(r=>r.type==="p").sort((a,b)=> b.last.localeCompare(a.last) || b.days - a.days);
+  const facs = rows.filter(r=>r.type==="f").sort((a,b)=> b.days - a.days);
+  if (!prods.length && !facs.length) { el.innerHTML = `<div class="empty">Your usage table builds itself from your memos.</div>`; return; }
+  const se = s => s ? `<span style="color:${s.after < s.before - .3 ? "var(--good)" : s.after > s.before + .3 ? "var(--bad)" : "var(--muted)"};font-weight:600">${s.before.toFixed(1)}→${s.after.toFixed(1)}</span>` : `<span class="sub">–</span>`;
+  el.innerHTML = `
+    <h2 style="margin-top:4px">Products</h2>
+    <div class="card"><div class="tablewrap"><table>
+      <tr><th>Product</th><th>Days</th><th>Last</th><th>Since start</th></tr>
+      ${prods.map(r=>`<tr><td>${esc(r.name)}<div class="sub">${esc(r.category||"")} · since ${shortDay(r.first)}</div></td><td>${r.days}</td><td>${shortDay(r.last)}</td><td>${se(r.start)}</td></tr>`).join("") || `<tr><td colspan="4" class="sub">None yet</td></tr>`}
+    </table></div>
+    <div class="hint">"Since start" = your average skin rating in the 2 weeks before you first logged it → the 4 weeks after. Lower is better.</div></div>
+    <h2>Lifestyle factors</h2>
+    <div class="card"><div class="tablewrap"><table>
+      <tr><th>Factor</th><th>Days</th><th>Last</th></tr>
+      ${facs.map(r=>`<tr><td>${esc(r.name)}</td><td>${r.days}</td><td>${shortDay(r.last)}</td></tr>`).join("") || `<tr><td colspan="3" class="sub">None yet</td></tr>`}
+    </table></div></div>`;
+}
+function toCsv(){
+  const q = v => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; };
+  const out = [["date","time","your_rating","ai_rating","type","name","category","when","day_offset","detail","memo"].join(",")];
+  for (const e of entries.slice().reverse()) {
+    const base = [e.date, fmtTime(e.ts), e.rating ?? "", e.ai?.score ?? ""];
+    const items = [...(e.products||[]).map(p=>["product",p.name,p.category,p.time,p.dayOffset||0,p.amount||""]), ...(e.factors||[]).map(f=>["factor",f.name,"","",f.dayOffset||0,f.detail||""])];
+    if (!items.length) items.push(["","","","","",""]);
+    items.forEach((it, i) => out.push([...base, ...it, i===0 ? e.memo||"" : ""].map(q).join(",")));
+  }
+  return out.join("\n");
+}
+
+function renderInsights(){
+  const el = $("#insBody");
+  const ratings = dailyRatings(), { meta } = exposureMap();
+  const lag = LAGS[settings.lagIdx] || LAGS[1];
+  const effs = computeEffects(lag);
+  const worse = effs.filter(x=>x.delta > 0.15).sort((a,b)=>b.z-a.z).slice(0,10);
+  const better = effs.filter(x=>x.delta < -0.15).sort((a,b)=>a.z-b.z).slice(0,10);
+  const conf = z => { const a = Math.abs(z); return a >= 2 ? "strong signal" : a >= 1 ? "some signal" : "weak signal"; };
+  const effRow = x => { const w = Math.min(50, Math.abs(x.delta) / 4 * 50), col = x.delta > 0 ? "var(--bad)" : "var(--good)";
+    return `<div class="eff"><div class="n">${esc(x.name)}<small>${x.type==="f"?"factor":"product"} · ${conf(x.z)} · ${x.nYes} days vs ${x.nNo}</small></div>
+      <div class="bar"><i style="background:${col};${x.delta>0?`left:50%;width:${w}%`:`right:50%;width:${w}%`}"></i></div><div class="delta" style="color:${col}">${x.delta>0?"+":""}${x.delta.toFixed(1)}</div></div>`; };
+  const opts = [...meta.entries()].sort((a,b)=>a[1].name.localeCompare(b[1].name)).map(([k,m])=>`<option value="${esc(k)}"${k===overlayKey?" selected":""}>${esc(m.name)}${m.type==="f"?" (factor)":""}</option>`).join("");
+  let h = `<h2 style="margin-top:4px">Skin over time</h2><div class="card">${ratings.size ? trendChart(ratings) : `<div class="sub">Rate your skin when you log to see a trend.</div>`}
+    ${meta.size ? `<div class="row" style="margin-top:10px"><span class="sub">Overlay</span><select id="overlay" style="flex:1;padding:7px 9px"><option value="">None</option>${opts}</select></div>` : ""}
+    <label class="toggle" style="border:0;padding-bottom:0"><span class="sub">Use AI photo estimate on days you didn't rate</span><input type="checkbox" id="aiFill"${settings.useAiFill?" checked":""}></label></div>`;
+  h += `<h2>What's linked to your skin</h2><div class="seg" id="lagSeg">${LAGS.map((l,i)=>`<button data-i="${i}"${i===settings.lagIdx?' class="on"':""}>${l.l}</button>`).join("")}</div>`;
+  if (ratings.size < 8) h += `<div class="card"><div class="sub">Needs about 8+ rated days to start comparing (you have ${ratings.size}). Patterns get trustworthy after 3–4 weeks.</div></div>`;
+  else h += `<div class="card"><div class="sub" style="margin-bottom:6px">Average skin rating ${lag.a===lag.b?"the day after":`${lag.a}–${lag.b} days after`} each item vs days without it. Higher = worse.</div>
+      <h3>Linked to worse skin</h3>${worse.length ? worse.map(effRow).join("") : `<div class="sub">Nothing stands out yet.</div>`}
+      <h3>Linked to clearer skin</h3>${better.length ? better.map(effRow).join("") : `<div class="sub">Nothing stands out yet.</div>`}
+      <div class="hint" style="margin-top:10px">Correlation, not proof. Daily-use products can't be compared this way; see "Since start" on Products.</div></div>`;
+  h += `<h2>Ask Claude</h2><div class="card"><div class="sub">Sends your log as text (no photos) and gets likely triggers, what's working, and an experiment to try next.</div>
+    <button class="primary" id="askBtn"${entries.length<3?" disabled":""}>${analysis?"Re-analyze my log":"Analyze my log"}</button>
+    <div id="askOut" class="md" style="margin-top:14px">${analysis ? md(analysis.text) + `<div class="hint">From ${esc(new Date(analysis.ts).toLocaleDateString())}, based on ${analysis.n} entries.</div>` : ""}</div></div>`;
+  el.innerHTML = h;
+  const ov = $("#overlay"); if (ov) ov.onchange = () => { overlayKey = ov.value; renderInsights(); };
+  $("#aiFill").onchange = ev => { settings.useAiFill = ev.target.checked; saveSettings(); renderInsights(); };
+  $("#lagSeg").onclick = ev => { const b = ev.target.closest("button"); if (!b) return; settings.lagIdx = +b.dataset.i; saveSettings(); renderInsights(); };
+  $("#askBtn").onclick = runAnalysis;
+}
+let askCtl = null;
+async function runAnalysis(){
+  const btn = $("#askBtn"), out = $("#askOut");
+  if (askCtl) { askCtl.abort(); return; }
+  askCtl = new AbortController();
+  btn.textContent = "Stop"; out.innerHTML = `<div class="sub"><span class="spin"></span> Thinking… this can take up to a minute.</div>`;
+  const ratings = dailyRatings(), byDay = new Map();
+  const day = d => { if (!byDay.has(d)) byDay.set(d, { p: new Set(), f: new Set(), skin: [], ai: [] }); return byDay.get(d); };
+  for (const e of entries.slice().reverse()) {
+    const d = day(e.date);
+    for (const p of e.products||[]) day(addDays(e.date, p.dayOffset||0)).p.add(p.name + (p.time!=="other"?` (${p.time})`:""));
+    for (const f of e.factors||[]) day(addDays(e.date, f.dayOffset||0)).f.add(f.name + (f.detail?` [${f.detail}]`:""));
+    if (e.skin) d.skin.push(e.skin);
+    if (e.ai?.regions?.length) d.ai.push(e.ai.regions.join("/"));
+  }
+  const lines = [...byDay.keys()].sort().slice(-150).map(d => { const v = byDay.get(d), r = ratings.get(d);
+    return `${d} | rating ${r!=null?r.toFixed(1):"-"} | products: ${[...v.p].join(", ")||"-"} | factors: ${[...v.f].join(", ")||"-"}${v.skin.length?` | notes: ${v.skin.join("; ")}`:""}${v.ai.length?` | acne areas: ${v.ai.join("; ")}`:""}`; });
+  const { meta } = exposureMap();
+  const starts = [...meta.values()].filter(m=>m.type==="p").map(m=>{ const s = startEffect(m, ratings); return `${m.name}: first ${m.first}${s?`, avg ${s.before.toFixed(1)} (2wk before) → ${s.after.toFixed(1)} (4wk after)`:""}`; });
+  const effs = computeEffects(LAGS[1]).sort((a,b)=>Math.abs(b.z)-Math.abs(a.z)).slice(0,15).map(x=>`${x.name}: ${x.delta>0?"+":""}${x.delta.toFixed(2)} (n=${x.nYes} vs ${x.nNo}, z=${x.z.toFixed(1)})`);
+  const prompt = `You're helping someone understand their own acne from a personal log they keep. Ratings are 0 (clear) to 10 (worst), self-rated (or AI-estimated from a photo on days they didn't rate).
+
+Daily log (oldest first):
+${lines.join("\n")}
+
+Product start dates and before/after averages:
+${starts.join("\n") || "-"}
+
+Precomputed: difference in average rating 1-3 days after each item vs days without it (positive = worse):
+${effs.join("\n") || "-"}
+
+Write a concise, specific analysis in Markdown (under 350 words) with these "#### " headings:
+#### Likely triggers - strongest candidates, the evidence from the log, and how confident you are
+#### What seems to help
+#### New products to watch - say when worsening after starting a product could be purging (retinoids, acids; usually settles within ~4-6 weeks) vs a true reaction
+#### Next experiment - one concrete single-variable test (e.g. cut X for 2 weeks while keeping everything else the same)
+#### Gaps in the data - what to log more consistently
+Be honest about small samples and confounders (things that happen together, the menstrual cycle). Don't invent data. If acne looks severe, scarring, or cystic, suggest a dermatologist in one line.`;
+  try {
+    const text = await claude(prompt, { model: settings.analysisModel, max_tokens: 2000, signal: askCtl.signal });
+    analysis = { text, ts: Date.now(), n: entries.length }; await store.set("analysis", analysis).catch(()=>{});
+    out.innerHTML = md(text);
+  } catch (e) { out.innerHTML = e.code === "cancelled" ? "" : `<div class="sub">${esc(errText(e))}</div>`; }
+  finally { askCtl = null; const b = $("#askBtn"); if (b) b.textContent = "Re-analyze my log"; }
+}
+function md(src){
+  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*(?!\s)(.+?)\*/g, "$1<i>$2</i>");
+  let h = "", list = false;
+  for (const raw of String(src||"").split("\n")) {
+    const line = raw.trimEnd();
+    const li = line.match(/^\s*[-*•]\s+(.*)/) || line.match(/^\s*\d+[.)]\s+(.*)/);
+    if (li) { if (!list) { h += "<ul>"; list = true; } h += `<li>${inline(li[1])}</li>`; continue; }
+    if (list) { h += "</ul>"; list = false; }
+    const hd = line.match(/^#{1,6}\s+(.*)/);
+    if (hd) h += `<h4>${inline(hd[1])}</h4>`; else if (line.trim()) h += `<p>${inline(line)}</p>`;
+  }
+  if (list) h += "</ul>";
+  return h;
+}
+function trendChart(ratings){
+  const today = ymd(Date.now()), dates = [...ratings.keys()].sort();
+  let start = dates[0]; if (dayDiff(start, today) > 89) start = addDays(today, -89);
+  const span = Math.max(6, dayDiff(start, today));
+  const W = 340, H = 170, L = 22, R = 8, T = 8, B = overlayKey ? 34 : 22;
+  const x = d => L + (dayDiff(start, d) / span) * (W - L - R);
+  const y = r => T + (1 - r/10) * (H - T - B);
+  let s = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Skin rating trend">`;
+  for (const g of [0, 5, 10]) s += `<line x1="${L}" x2="${W-R}" y1="${y(g)}" y2="${y(g)}" stroke="var(--line)"/><text x="${L-6}" y="${y(g)+4}" font-size="10" text-anchor="end" fill="var(--muted)">${g}</text>`;
+  const pts = dates.filter(d => d >= start);
+  const roll = pts.map(d => [d, mean(pts.filter(o => Math.abs(dayDiff(o, d)) <= 3).map(o => ratings.get(o)))]);
+  if (roll.length > 1) s += `<path d="${roll.map(([d,v],i)=>`${i?"L":"M"}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity=".75"/>`;
+  for (const d of pts) { const r = ratings.get(d); s += `<circle cx="${x(d).toFixed(1)}" cy="${y(r).toFixed(1)}" r="3.4" fill="${rateColor(r)}"/>`; }
+  if (overlayKey) {
+    const set = exposureMap().ex.get(overlayKey) || new Set(), yy = H - 18;
+    s += `<line x1="${L}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2 3"/>`;
+    for (const d of set) if (d >= start && d <= today) s += `<rect x="${(x(d)-2).toFixed(1)}" y="${yy-5}" width="4" height="10" rx="1.5" fill="var(--accent)"/>`;
+  }
+  s += `<text x="${L}" y="${H-3}" font-size="10" fill="var(--muted)">${shortDay(start)}</text><text x="${W-R}" y="${H-3}" font-size="10" text-anchor="end" fill="var(--muted)">Today</text></svg>`;
+  s += `<div class="legend"><span><i style="background:var(--ink);opacity:.75"></i>7-day average</span><span><i style="background:${rateColor(3)}"></i>daily rating</span>${overlayKey?`<span><i style="background:var(--accent)"></i>days used</span>`:""}</div>`;
+  return s;
+}
+
+boot();
+</script>
+</body>
+</html>
