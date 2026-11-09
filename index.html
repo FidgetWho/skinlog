@@ -160,6 +160,21 @@ nav button.on{color:var(--accent);font-weight:600}
 .stepper button{width:38px;height:38px;border-radius:10px;background:var(--soft);border:1px solid var(--line);font-size:20px;font-weight:600}
 .stepper b{min-width:30px;text-align:center;font-size:17px}
 .subhead{font-size:12px;color:var(--muted);margin:12px 0 2px;text-transform:uppercase;letter-spacing:.04em;font-weight:600}
+.camopts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px}
+.camopts .chip.pick{font-size:13px;padding:6px 11px}
+.cam .count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:96px;font-weight:700;color:#fff;text-shadow:0 2px 16px rgba(0,0,0,.6);pointer-events:none;z-index:3}
+body.sl{background:#fff}
+body.sl #capture{position:fixed;inset:0;z-index:35;background:#fff;color:#2a231f;padding:calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 14px);overflow-y:auto}
+body.sl .cam{width:62%;margin:0 auto}
+body.sl .areas{gap:3px;left:4px;right:4px}
+body.sl .areas button{padding:5px 8px;font-size:12px}
+body.sl .camBtn{width:38px;height:38px}
+body.sl .shutter{width:60px;height:60px}
+body.sl #capture .chip.pick{background:#f3ece5;border-color:#e0d5ca;color:#2a231f}
+body.sl #capture .chip.pick.on{background:#b8553a;border-color:#b8553a;color:#fff}
+body.sl #capture .shot{background:#f3ece5;border-color:#e0d5ca}
+body.sl #capture .alt, body.sl #capture .alt label, body.sl #capture .alt button{color:#7b6f67}
+body.sl #continueBtn{background:#2a231f;color:#fff}
 .bubble{border-radius:16px;padding:10px 13px;margin-bottom:10px;max-width:92%;font-size:14.5px}
 .bubble.me{background:var(--ink);color:var(--bg);margin-left:auto;width:fit-content;white-space:pre-wrap}
 .bubble.ai{background:var(--card);border:1px solid var(--line)}
@@ -189,6 +204,7 @@ tr.click{cursor:pointer}
       <video id="video" playsinline autoplay muted></video>
       <img class="ghost" id="ghost" alt="">
       <div class="areas" id="areaTabs"></div>
+      <div class="count hidden" id="camCount"></div>
       <div class="msg" id="camMsg">
         <div>Starting camera…</div>
       </div>
@@ -204,6 +220,7 @@ tr.click{cursor:pointer}
     </label>
     <input id="sysCam" type="file" accept="image/*" capture="user" class="hidden">
     <input id="lib" type="file" accept="image/*" class="hidden">
+    <div class="camopts" id="camOpts"></div>
     <div class="shots" id="capShots"></div>
     <button class="primary hidden" id="continueBtn"></button>
     <div class="alt"><label for="lib">Library</label><label for="sysCam">System camera</label><button id="nophoto">No photos</button></div>
@@ -335,7 +352,7 @@ function hydratePhotos(root=document){
 }
 
 /* ================= Claude API ================= */
-let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, inciLookup: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true, insArea: "all", histArea: "front" };
+let settings = { apiKey: "", parseModel: "claude-haiku-5-5", analysisModel: "claude-sonnet-5-5", aiPhoto: true, inciLookup: true, liveCam: true, useAiFill: true, lagIdx: 1, facing: "user", ghost: true, insArea: "all", histArea: "front", screenLight: false, timer: 0, torch: false };
 async function saveSettings(){ await store.set("settings", settings).catch(()=>{}); }
 async function claude(content, { model, max_tokens = 1500, signal, tools, raw } = {}){
   if (!settings.apiKey) throw { code: "no_key", message: "Add your Anthropic API key in Settings." };
@@ -381,6 +398,7 @@ async function patchEntry(id, patch){ const e = entries.find(x=>x.id===id); if (
 async function boot(){
   renderAreaTabs(); renderCapShots();
   try { const s = await store.get("settings"); if (s) settings = { ...settings, ...s }; } catch {}
+  renderCamOpts();
   if (settings.liveCam) startCamera(); else showSysCam();
   try { entries = await store.allEntries(); sortEntries(); analysis = await store.get("analysis") || null; catalog = await store.get("catalog") || {}; syncCatalog(); profile = await store.get("profile") || {}; chat = await store.get("chat") || []; }
   catch { $("#banner").innerHTML = `<div class="banner">This browser blocked local storage, so entries can't be saved. Open the app from your home screen icon.</div>`; }
@@ -416,6 +434,7 @@ function setView(v){
   document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
   ["log","history","products","insights","ask"].forEach(n=>$("#v-"+n).classList.toggle("hidden", n!==v));
   if (v === "log" && $("#draft").classList.contains("hidden") && settings.liveCam) startCamera(); else stopCamera();
+  renderCamOpts();
   window.scrollTo(0,0); render();
 }
 $("#histSeg").addEventListener("click", e => { const b=e.target.closest("button"); if(!b) return; histMode=b.dataset.m; document.querySelectorAll("#histSeg button").forEach(x=>x.classList.toggle("on",x===b)); renderHistory(); });
@@ -443,24 +462,93 @@ async function startCamera(){
     const v = $("#video"); v.srcObject = stream; await v.play().catch(()=>{});
     $("#cam").classList.toggle("mirror", settings.facing === "user");
     $("#camMsg").classList.add("hidden");
+    const track = stream.getVideoTracks()[0];
+    let caps = {}; try { caps = track.getCapabilities ? track.getCapabilities() : {}; } catch {}
+    torchSupported = !!caps.torch;
+    torchOn = false;
+    if (torchSupported && settings.torch && settings.facing === "environment") await setTorch(true);
+    renderCamOpts();
   } catch (e) {
     stream = null;
     $("#camMsg").innerHTML = `<div>Camera access is off.</div><button class="btn" id="camRetry" style="background:#fff;color:#111">Try again</button><div style="font-size:12px;opacity:.75">Or use “System camera” below.</div>`;
     const r = $("#camRetry"); if (r) r.onclick = () => startCamera();
   } finally { camStarting = false; }
 }
+let torchSupported = false, torchOn = false;
+async function setTorch(on){
+  const track = stream?.getVideoTracks()[0]; if (!track) return;
+  try { await track.applyConstraints({ advanced: [{ torch: on }] }); torchOn = on; } catch { torchOn = false; if (on) toast("Couldn't turn on the light"); }
+}
+function lightMode(){ return document.body.classList.contains("sl") ? "screen" : torchOn ? "torch" : "ambient"; }
+function renderCamOpts(){
+  const back = settings.facing === "environment";
+  const t = settings.timer || 0;
+  $("#camOpts").innerHTML =
+    `<button class="chip pick${settings.screenLight?" on":""}" data-co="sl">☀︎ Screen light</button>` +
+    (back && torchSupported ? `<button class="chip pick${torchOn?" on":""}" data-co="torch">🔦 Flash</button>` : "") +
+    `<button class="chip pick${t?" on":""}" data-co="timer">⏱ ${t ? t + "s timer" : "Timer off"}</button>` +
+    `<span class="chip" style="background:none">${back ? "Back camera" : "Front camera"}</span>`;
+  document.body.classList.toggle("sl", !!settings.screenLight && !$("#capture").classList.contains("hidden") && view === "log");
+}
+$("#camOpts").addEventListener("click", async e => {
+  const b = e.target.closest("[data-co]"); if (!b) return;
+  const k = b.dataset.co;
+  if (k === "sl") { settings.screenLight = !settings.screenLight; if (settings.screenLight) toast("Turn your screen brightness all the way up", 2200); }
+  if (k === "timer") settings.timer = settings.timer === 0 ? 3 : settings.timer === 3 ? 5 : settings.timer === 5 ? 10 : 0;
+  if (k === "torch") { settings.torch = !torchOn; await setTorch(settings.torch); }
+  saveSettings(); renderCamOpts();
+});
+let audioCtx = null;
+function beep(freq = 880, ms = 90){
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.frequency.value = freq; g.gain.value = 0.08;
+    o.connect(g); g.connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + ms/1000); } catch {}
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function grabFrame(v){
+  const max = 1600, s = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
+  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  return c;
+}
+function sharpness(c){
+  // variance of the Laplacian on a downsized grayscale centre crop: higher = sharper
+  const w = 320, h = Math.round(w * c.height / c.width), t = document.createElement("canvas"); t.width = w; t.height = h;
+  const x = t.getContext("2d", { willReadFrequently: true }); x.drawImage(c, 0, 0, w, h);
+  const x0 = Math.round(w*.2), y0 = Math.round(h*.2), x1 = Math.round(w*.8), y1 = Math.round(h*.8);
+  const d = x.getImageData(0, 0, w, h).data, g = new Float32Array(w*h);
+  for (let i = 0; i < w*h; i++) g[i] = .299*d[i*4] + .587*d[i*4+1] + .114*d[i*4+2];
+  let sum = 0, sq = 0, n = 0;
+  for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+    const i = yy*w + xx, L = 4*g[i] - g[i-1] - g[i+1] - g[i-w] - g[i+w];
+    sum += L; sq += L*L; n++;
+  }
+  return sq/n - (sum/n)**2;
+}
+let shooting = false;
 function stopCamera(){ if (stream) { stream.getTracks().forEach(t=>t.stop()); stream = null; } const v = $("#video"); if (v) v.srcObject = null; }
 function showSysCam(){ $("#cam").classList.add("hidden"); $("#sysCamBig").classList.remove("hidden"); }
 $("#shutter").addEventListener("click", async () => {
   const v = $("#video"); if (!stream || !v.videoWidth) { $("#sysCam").click(); return; }
-  const max = 1600, s = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
-  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
-  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
-  const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.86));
-  if (navigator.vibrate) navigator.vibrate(10);
-  addShot(blob);
+  if (shooting) return; shooting = true;
+  try {
+    const cnt = $("#camCount");
+    if (settings.timer) {
+      cnt.classList.remove("hidden");
+      for (let i = settings.timer; i > 0; i--) { cnt.textContent = i; beep(i === 1 ? 1320 : 880); await sleep(1000); if (!stream) return; }
+      cnt.classList.add("hidden");
+    }
+    // burst of 3, keep the sharpest
+    const frames = [];
+    for (let i = 0; i < 3; i++) { frames.push(grabFrame(v)); if (i < 2) await sleep(140); }
+    if (settings.timer) beep(1760, 60);
+    let best = frames[0], bestS = -1;
+    for (const f of frames) { const sc = sharpness(f); if (sc > bestS) { bestS = sc; best = f; } }
+    const blob = await new Promise(r => best.toBlob(r, "image/jpeg", 0.88));
+    addShot(blob, { cam: settings.facing === "user" ? "front" : "back", light: lightMode(), sharp: Math.round(bestS) });
+  } finally { shooting = false; $("#camCount").classList.add("hidden"); }
 });
-$("#flipBtn").addEventListener("click", async () => { settings.facing = settings.facing === "user" ? "environment" : "user"; saveSettings(); stopCamera(); startCamera(); });
+$("#flipBtn").addEventListener("click", async () => { settings.facing = settings.facing === "user" ? "environment" : "user"; saveSettings(); stopCamera(); renderCamOpts(); startCamera(); });
 $("#ghostBtn").addEventListener("click", () => { settings.ghost = !settings.ghost; saveSettings(); updateGhost(); });
 async function updateGhost(){
   let pid = null;
@@ -489,9 +577,9 @@ function shotTiles(photos){
 $("#capShots").addEventListener("click", e => { const t = e.target.closest("[data-shot]"); if (!t) return; camArea = t.dataset.shot; renderAreaTabs(); updateGhost(); });
 $("#draftShots").addEventListener("click", e => { const t = e.target.closest("[data-shot]"); if (!t) return; backToCamera(t.dataset.shot); });
 $("#continueBtn").addEventListener("click", openDraft);
-function addShot(blob){
+function addShot(blob, meta = { cam: "system", light: "unknown" }){
   const old = draft.photos[camArea]; if (old) URL.revokeObjectURL(old.url);
-  draft.photos[camArea] = { blob, url: URL.createObjectURL(blob) };
+  draft.photos[camArea] = { blob, url: URL.createObjectURL(blob), meta };
   draft.active = true;
   const order = AREA_KEYS.slice(AREA_KEYS.indexOf(camArea) + 1).concat(AREA_KEYS);
   const next = order.find(k => !draft.photos[k]);
@@ -521,7 +609,7 @@ async function compress(blob, max){
 }
 function openDraft(){
   stopCamera(); draft.active = true;
-  $("#capture").classList.add("hidden"); $("#draft").classList.remove("hidden");
+  $("#capture").classList.add("hidden"); $("#draft").classList.remove("hidden"); renderCamOpts();
   $("#draftShots").innerHTML = shotTiles(draft.photos);
   renderRateRows(); renderPicker(); renderDaily();
   renderLastSaved();
@@ -529,7 +617,7 @@ function openDraft(){
 function backToCamera(area){
   stopMic();
   camArea = area; renderAreaTabs(); renderCapShots(); updateGhost();
-  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
+  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden"); renderCamOpts();
   if (settings.liveCam && view === "log") startCamera();
 }
 function resetDraft(restartCam){
@@ -538,7 +626,7 @@ function resetDraft(restartCam){
   draft.photos = {}; draft.ratings = {}; draft.active = false; camArea = "front";
   draft.products = []; draft.water = null; draft.bedding = {}; draft.diet = new Set();
   $("#memo").value = ""; $("#notes").value = ""; $("#prodSearch").value = ""; renderSearch();
-  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden");
+  $("#draft").classList.add("hidden"); $("#capture").classList.remove("hidden"); renderCamOpts();
   renderAreaTabs(); renderCapShots(); updateGhost();
   if (restartCam !== false && settings.liveCam && view === "log") startCamera();
   renderLastSaved();
@@ -710,7 +798,7 @@ async function saveDraft(){
   const now = Date.now(), id = uidGen(), photos = [];
   for (const k of shotAreas) {
     const pid = "p_" + id.slice(2) + "_" + k;
-    try { await store.putPhoto(pid, draft.photos[k].blob); photos.push({ area: k, id: pid }); } catch { toast("Couldn't store a photo"); }
+    try { await store.putPhoto(pid, draft.photos[k].blob); photos.push({ area: k, id: pid, ...(draft.photos[k].meta || {}) }); } catch { toast("Couldn't store a photo"); }
   }
   const e = { id, ts: now, date: ymd(now), photos, areaRatings, rating: meanOrNull(Object.values(areaRatings)), memo, notes, products, factors, water: draft.water, bedding, skin: "", summary: "", ai: null,
               needsParse: !!memo, needsAi: !!(photos.length && settings.aiPhoto), status: memo ? "queued" : "ok", error: "" };
