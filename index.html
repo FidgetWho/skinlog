@@ -457,7 +457,7 @@ async function startCamera(){
   $("#cam").classList.remove("hidden"); $("#sysCamBig").classList.add("hidden");
   $("#camMsg").classList.remove("hidden"); $("#camMsg").innerHTML = `<div>Starting camera…</div>`;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: settings.facing, width: { ideal: 1920 }, height: { ideal: 2560 } }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: settings.facing, width: { ideal: 4032 }, height: { ideal: 3024 } }, audio: false });
     if (document.hidden || view !== "log" || !$("#draft").classList.contains("hidden")) { stopCamera(); return; }
     const v = $("#video"); v.srcObject = stream; await v.play().catch(()=>{});
     $("#cam").classList.toggle("mirror", settings.facing === "user");
@@ -506,9 +506,14 @@ function beep(freq = 880, ms = 90){
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 function grabFrame(v){
-  const max = 1600, s = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
-  const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth*s); c.height = Math.round(v.videoHeight*s);
-  c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  // keep exactly what the viewfinder shows (object-fit: cover crop) at full sensor resolution
+  const vw = v.videoWidth, vh = v.videoHeight, bw = v.clientWidth || 3, bh = v.clientHeight || 4;
+  const ba = bw / bh, va = vw / vh;
+  let sx = 0, sy = 0, sw = vw, sh = vh;
+  if (va > ba) { sw = Math.round(vh * ba); sx = Math.round((vw - sw) / 2); } else { sh = Math.round(vw / ba); sy = Math.round((vh - sh) / 2); }
+  const max = 2400, k = Math.min(1, max / Math.max(sw, sh));
+  const c = document.createElement("canvas"); c.width = Math.round(sw*k); c.height = Math.round(sh*k);
+  c.getContext("2d").drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
   return c;
 }
 function sharpness(c){
@@ -545,7 +550,7 @@ $("#shutter").addEventListener("click", async () => {
     let best = frames[0], bestS = -1;
     for (const f of frames) { const sc = sharpness(f); if (sc > bestS) { bestS = sc; best = f; } }
     const blob = await new Promise(r => best.toBlob(r, "image/jpeg", 0.88));
-    addShot(blob, { cam: settings.facing === "user" ? "front" : "back", light: lightMode(), sharp: Math.round(bestS) });
+    addShot(blob, { cam: settings.facing === "user" ? "front" : "back", light: lightMode(), sharp: Math.round(bestS), w: best.width, h: best.height, src: v.videoWidth + "x" + v.videoHeight });
   } finally { shooting = false; $("#camCount").classList.add("hidden"); }
 });
 $("#flipBtn").addEventListener("click", async () => { settings.facing = settings.facing === "user" ? "environment" : "user"; saveSettings(); stopCamera(); renderCamOpts(); startCamera(); });
@@ -594,7 +599,7 @@ $("#nophoto").addEventListener("click", openDraft);
 $("#cancel").addEventListener("click", () => resetDraft(true));
 async function onPicked(input){
   const f = input.files[0]; input.value = ""; if (!f) return;
-  let b; try { b = await compress(f, 1600); } catch { b = f; }
+  let b; try { b = await compress(f, 2400); } catch { b = f; }
   addShot(b);
 }
 async function compress(blob, max){
